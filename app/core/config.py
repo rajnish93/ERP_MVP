@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     
+    # Security & JWT
+    SECRET_KEY: str = "your-secret-key-change-this-in-production-use-openssl-rand-hex-32"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

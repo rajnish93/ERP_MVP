@@ -1,0 +1,13 @@
+# PEP 621 format for UV and other modern tools
+[project]
+name = "fastapi-app"
+version = "1.0.0"
+description = "FastAPI application with Docker and Nginx"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi==0.120.4",
+    "uvicorn[standard]==0.38.0",
+    "pydantic==2.12.3",
+    "pydantic-settings==2.11.0",
+]
+

@@ -1,8 +1,9 @@
 from typing import Optional
 from datetime import datetime
+from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field
 
-from app.models.company import PlanType
+from app.db.models.company import PlanType
 
 
 class CompanyBase(BaseModel):
@@ -16,13 +17,21 @@ class CompanyCreate(CompanyBase):
     # Admin user details
     admin_name: str = Field(..., min_length=1, max_length=100)
     admin_email: EmailStr
-    admin_password: str = Field(..., min_length=8, max_length=72)  # bcrypt limit is 72 bytes
+    admin_password: str = Field(
+        ..., 
+        min_length=8, 
+        max_length=72,
+        description="Admin password must be at least 8 characters long",
+        json_schema_extra={
+            "example": "SecurePassword123!"
+        }
+    )  # bcrypt limit is 72 bytes
     plan_type: PlanType = PlanType.FREE
 
 
 class CompanyResponse(CompanyBase):
     """Schema for company response"""
-    id: int
+    id: UUID
     plan_type: PlanType
     is_active: bool
     created_at: datetime

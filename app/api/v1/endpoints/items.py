@@ -1,16 +1,17 @@
 from typing import List
+from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.core.dependencies import get_current_active_user, get_current_company_id
-from app.models.user import User
+from app.db.models.user import User
 
 router = APIRouter()
 
 
 class Item(BaseModel):
-    id: int
-    company_id: int  # Tenant isolation
+    id: UUID
+    company_id: UUID  # Tenant isolation
     name: str
     description: str = None
     price: float
@@ -24,12 +25,11 @@ class ItemCreate(BaseModel):
 
 # In-memory storage for demo purposes (tenant-aware)
 items_db = []
-next_id = 1
 
 
 @router.get("/", response_model=List[Item])
 async def get_items(
-    company_id: int = Depends(get_current_company_id),
+    company_id: UUID = Depends(get_current_company_id),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -43,8 +43,8 @@ async def get_items(
 
 @router.get("/{item_id}", response_model=Item)
 async def get_item(
-    item_id: int,
-    company_id: int = Depends(get_current_company_id),
+    item_id: UUID,
+    company_id: UUID = Depends(get_current_company_id),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -67,7 +67,7 @@ async def get_item(
 @router.post("/", response_model=Item, status_code=status.HTTP_201_CREATED)
 async def create_item(
     item: ItemCreate,
-    company_id: int = Depends(get_current_company_id),
+    company_id: UUID = Depends(get_current_company_id),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -75,24 +75,22 @@ async def create_item(
     
     **Tenant Isolation**: Items are automatically assigned to the current user's company.
     """
-    global next_id
     new_item = {
-        "id": next_id,
+        "id": uuid4(),
         "company_id": company_id,  # Tenant isolation
         "name": item.name,
         "description": item.description,
         "price": item.price,
     }
     items_db.append(new_item)
-    next_id += 1
     return new_item
 
 
 @router.put("/{item_id}", response_model=Item)
 async def update_item(
-    item_id: int,
+    item_id: UUID,
     item: ItemCreate,
-    company_id: int = Depends(get_current_company_id),
+    company_id: UUID = Depends(get_current_company_id),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -120,8 +118,8 @@ async def update_item(
 
 @router.delete("/{item_id}", status_code=status.HTTP_200_OK)
 async def delete_item(
-    item_id: int,
-    company_id: int = Depends(get_current_company_id),
+    item_id: UUID,
+    company_id: UUID = Depends(get_current_company_id),
     current_user: User = Depends(get_current_active_user),
 ):
     """

@@ -1,8 +1,9 @@
 from typing import Optional
 from datetime import datetime
+from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field
 
-from app.models.user import UserRole
+from app.db.models.user import UserRole
 
 
 class UserBase(BaseModel):
@@ -19,8 +20,8 @@ class UserCreate(UserBase):
 
 class UserResponse(UserBase):
     """Schema for user response (without sensitive data)"""
-    id: int
-    company_id: int
+    id: UUID
+    company_id: UUID
     role: UserRole
     is_active: bool
     created_at: datetime
@@ -44,7 +45,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     """Schema for token data (decoded JWT)"""
     email: Optional[str] = None
-    user_id: Optional[int] = None
-    company_id: Optional[int] = None
+    user_id: Optional[UUID] = None
+    company_id: Optional[UUID] = None
     role: Optional[UserRole] = None
 

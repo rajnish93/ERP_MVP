@@ -1,17 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
-from app.models.company import Company, PlanType, companies_db
-from app.models.user import User, UserRole, users_db
+from app.core.database import get_db
+from app.db.models.company import Company, PlanType
+from app.db.models.user import User, UserRole
 from app.core.security import get_password_hash
 from app.schemas.company import CompanyCreate, CompanyResponse, CompanySignupResponse
-import app.models.company as company_model
-import app.models.user as user_model
 
 router = APIRouter()
 
 
 @router.post("/signup", response_model=CompanySignupResponse, status_code=status.HTTP_201_CREATED)
-async def company_signup(company_data: CompanyCreate):
+async def company_signup(company_data: CompanyCreate, db: Session = Depends(get_db)):
     """
     Company signup endpoint - creates a new company (tenant) and initial Admin user.
     
@@ -31,7 +31,7 @@ async def company_signup(company_data: CompanyCreate):
     - Admin can create users via /api/v1/users/create endpoint
     """
     # Check if company email already exists
-    existing_company = next((c for c in companies_db if c.email == company_data.email), None)
+    existing_company = db.query(Company).filter(Company.email == company_data.email).first()
     if existing_company:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -39,7 +39,7 @@ async def company_signup(company_data: CompanyCreate):
         )
     
     # Check if admin email already exists
-    existing_user = next((u for u in users_db if u.email == company_data.admin_email), None)
+    existing_user = db.query(User).filter(User.email == company_data.admin_email).first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -48,33 +48,46 @@ async def company_signup(company_data: CompanyCreate):
     
     # Create new company
     new_company = Company(
-        id=company_model.next_company_id,
         name=company_data.name,
         email=company_data.email,
         plan_type=company_data.plan_type,
         is_active=True,
     )
-    companies_db.append(new_company)
-    company_id = company_model.next_company_id
-    company_model.next_company_id += 1
+    db.add(new_company)
+    db.flush()  # Flush to get the company ID without committing
     
     # Create initial Admin user for this company
     hashed_password = get_password_hash(company_data.admin_password)
     admin_user = User(
-        id=user_model.next_user_id,
-        company_id=company_id,
+        company_id=new_company.id,
         email=company_data.admin_email,
         hashed_password=hashed_password,
         full_name=company_data.admin_name,
         role=UserRole.ADMIN,  # First user is always Admin
         is_active=True,
     )
-    users_db.append(admin_user)
-    user_model.next_user_id += 1
+    db.add(admin_user)
+    db.commit()
+    db.refresh(new_company)
+    db.refresh(admin_user)
     
     return CompanySignupResponse(
-        company=CompanyResponse(**new_company.to_dict()),
-        admin_user=admin_user.to_dict(),
+        company=CompanyResponse(
+            id=new_company.id,
+            name=new_company.name,
+            email=new_company.email,
+            plan_type=new_company.plan_type,
+            is_active=new_company.is_active,
+            created_at=new_company.created_at,
+        ),
+        admin_user={
+            "id": admin_user.id,
+            "company_id": admin_user.company_id,
+            "email": admin_user.email,
+            "full_name": admin_user.full_name,
+            "role": admin_user.role.value,
+            "is_active": admin_user.is_active,
+            "created_at": admin_user.created_at.isoformat() if admin_user.created_at else None,
+        },
         message="Company registered successfully. Admin user created."
     )
-

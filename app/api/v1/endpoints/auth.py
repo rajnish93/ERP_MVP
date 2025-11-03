@@ -1,10 +1,12 @@
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import verify_password, create_access_token
-from app.models.user import users_db
+from app.core.database import get_db
+from app.db.models.user import User
 from app.schemas.user import Token
 
 router = APIRouter()
@@ -13,7 +15,10 @@ router = APIRouter()
 
 
 @router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
     """
     OAuth2 Password Flow token endpoint.
     
@@ -42,7 +47,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     """
     # OAuth2PasswordRequestForm uses 'username' field, but we store email
     # Find user by email (email is passed as username in OAuth2 Password Flow)
-    user = next((u for u in users_db if u.email == form_data.username), None)
+    user = db.query(User).filter(User.email == form_data.username).first()
     
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -58,12 +63,13 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         )
     
     # Create JWT access token with user information (includes company_id for tenant isolation)
+    # Convert UUIDs to strings for JWT serialization
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
             "sub": user.email,  # Subject (email) - standard JWT claim
-            "user_id": user.id,
-            "company_id": user.company_id,  # Critical for tenant isolation
+            "user_id": str(user.id),  # Convert UUID to string for JWT
+            "company_id": str(user.company_id),  # Convert UUID to string for JWT - critical for tenant isolation
             "role": user.role.value
         },
         expires_delta=access_token_expires

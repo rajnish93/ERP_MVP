@@ -3,6 +3,10 @@ uvicorn[standard]==0.38.0
 pydantic==2.12.3
 pydantic-settings==2.11.0
 email-validator==2.2.0
+# Database dependencies
+sqlalchemy==2.0.44
+psycopg2-binary==2.9.11
+alembic==1.17.1
 # Authentication dependencies
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1  # Pin to 4.0.1 to avoid AttributeError: module 'bcrypt' has no attribute '__about__'

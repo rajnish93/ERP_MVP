@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import datetime
+from uuid import UUID
 from pydantic import BaseModel, Field
 
 
@@ -15,7 +16,7 @@ class EmployeeBase(BaseModel):
 
 class EmployeeCreate(EmployeeBase):
     """Schema for creating a new employee"""
-    user_id: int = Field(..., description="User account ID to link employee to")
+    user_id: UUID = Field(..., description="User account ID to link employee to")
 
 
 class EmployeeUpdate(BaseModel):
@@ -31,9 +32,9 @@ class EmployeeUpdate(BaseModel):
 
 class EmployeeResponse(EmployeeBase):
     """Schema for employee response"""
-    id: int
-    company_id: int
-    user_id: int
+    id: UUID
+    company_id: UUID
+    user_id: UUID
     is_active: bool
     created_at: datetime
     updated_at: datetime

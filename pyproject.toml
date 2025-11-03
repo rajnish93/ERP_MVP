@@ -19,3 +19,8 @@ dependencies = [
     "python-multipart==0.0.12",
 ]
 
+[dependency-groups]
+dev = [
+    "faker>=37.12.0",
+]
+

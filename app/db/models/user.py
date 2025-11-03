@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Boolean, DateTime, CheckConstraint, ForeignKey
+from sqlalchemy import String, Boolean, DateTime, CheckConstraint, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -28,8 +28,9 @@ class User(Base):
     __table_args__ = (
         CheckConstraint(
             "role IN ('admin', 'hr', 'employee')",
-            name="check_user_role"
+            name="ck_users_role"
         ),
+        UniqueConstraint('company_id', 'email', name='uq_users_company_email'),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -40,7 +41,7 @@ class User(Base):
     )
     company_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), 
-        ForeignKey("companies.id", ondelete="CASCADE"), 
+        ForeignKey("companies.id", ondelete="CASCADE", name="fk_users_company"), 
         nullable=False, 
         index=True
     )
@@ -48,10 +49,12 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        EnumType(UserRole, length=20),
+        EnumType(UserRole, length=100),
         nullable=False,
         default=UserRole.EMPLOYEE,
-        server_default=UserRole.EMPLOYEE.value
+        server_default=UserRole.EMPLOYEE.value,
+        index=True,
+        comment="User role (admin, hr, employee) - indexed for fast role-based access control queries"
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

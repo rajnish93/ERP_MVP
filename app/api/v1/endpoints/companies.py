@@ -17,8 +17,7 @@ async def company_signup(company_data: CompanyCreate, db: Session = Depends(get_
     
     This is the entry point for multi-tenant SaaS. When a company signs up:
     1. A new company record is created
-    2. An Admin user is automatically created for that company
-    3. The Admin can then create HR and Employee users
+    2. An Admin user is automatically created for that company (no employee record yet)
     
     **Request**:
     - Company details: name, email, plan_type
@@ -26,9 +25,14 @@ async def company_signup(company_data: CompanyCreate, db: Session = Depends(get_
     
     **Response**: Company details and Admin user details
     
+    **Flow**:
+    - Company signup → Admin user created (no employee record)
+    - Admin can create employee records via /api/v1/employees endpoint
+    - Admin can invite employees (create user accounts) via /api/v1/users/create endpoint
+    
     **Next Steps**:
     - Admin logs in using admin_email and admin_password
-    - Admin can create users via /api/v1/users/create endpoint
+    - Admin creates employees and then invites them to the portal
     """
     # Check if company email already exists
     existing_company = db.query(Company).filter(Company.email == company_data.email).first()
@@ -56,7 +60,7 @@ async def company_signup(company_data: CompanyCreate, db: Session = Depends(get_
     db.add(new_company)
     db.flush()  # Flush to get the company ID without committing
     
-    # Create initial Admin user for this company
+    # Create initial Admin user for this company (no employee record yet)
     hashed_password = get_password_hash(company_data.admin_password)
     admin_user = User(
         company_id=new_company.id,
@@ -89,5 +93,5 @@ async def company_signup(company_data: CompanyCreate, db: Session = Depends(get_
             "is_active": admin_user.is_active,
             "created_at": admin_user.created_at.isoformat() if admin_user.created_at else None,
         },
-        message="Company registered successfully. Admin user created."
+        message="Company registered successfully. Admin user created. You can now create employees and invite them to the portal."
     )

@@ -16,7 +16,7 @@ class EmployeeBase(BaseModel):
 
 class EmployeeCreate(EmployeeBase):
     """Schema for creating a new employee"""
-    user_id: UUID = Field(..., description="User account ID to link employee to")
+    user_id: Optional[UUID] = Field(None, description="Optional user account ID to link employee to. Employees can exist without user accounts.")
 
 
 class EmployeeUpdate(BaseModel):
@@ -27,6 +27,7 @@ class EmployeeUpdate(BaseModel):
     joining_date: Optional[datetime] = None
     employee_id: Optional[str] = Field(None, max_length=50)
     phone: Optional[str] = Field(None, max_length=20)
+    user_id: Optional[UUID] = Field(None, description="Optional user account ID to link employee to")
     is_active: Optional[bool] = None
 
 
@@ -34,7 +35,7 @@ class EmployeeResponse(EmployeeBase):
     """Schema for employee response"""
     id: UUID
     company_id: UUID
-    user_id: UUID
+    user_id: Optional[UUID]
     is_active: bool
     created_at: datetime
     updated_at: datetime

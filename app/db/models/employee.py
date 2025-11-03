@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Boolean, DateTime, ForeignKey
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -14,8 +14,20 @@ if TYPE_CHECKING:
 
 
 class Employee(Base):
-    """Employee model - linked to user account and company (tenant)"""
+    """
+    Employee model - linked to user account and company (tenant)
+    
+    **Important Notes:**
+    - `user_id` is OPTIONAL - employees can exist without user accounts
+      (e.g., employees not yet onboarded to the portal)
+    - `employee_id` is OPTIONAL - human-readable employee code (e.g., "EMP-001")
+    - All users must have employee records, but employees can exist without user accounts
+    - When downgrading migrations, employees with NULL user_id must be handled/deleted
+    """
     __tablename__ = "employees"
+    __table_args__ = (
+        UniqueConstraint('user_id', name='uq_employees_user_id'),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), 
@@ -25,16 +37,18 @@ class Employee(Base):
     )
     company_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), 
-        ForeignKey("companies.id", ondelete="CASCADE"), 
+        ForeignKey("companies.id", ondelete="CASCADE", name="fk_employees_company"), 
         nullable=False, 
-        index=True
+        index=True,
+        comment="Company (tenant) this employee belongs to"
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), 
-        ForeignKey("users.id", ondelete="CASCADE"), 
-        nullable=False, 
-        unique=True, 
-        index=True
+        ForeignKey("users.id", ondelete="SET NULL", name="fk_employees_user"), 
+        nullable=True, 
+        index=True,
+        comment="Optional user account ID. NULL means employee exists but doesn't have login credentials yet. "
+                "When downgrading migrations that require NOT NULL, these records must be handled/deleted."
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     department: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -68,5 +82,5 @@ class Employee(Base):
 
     # Relationships
     company: Mapped["Company"] = relationship("Company", back_populates="employees")
-    user: Mapped["User"] = relationship("User", back_populates="employee")
+    user: Mapped[Optional["User"]] = relationship("User", back_populates="employee")
 

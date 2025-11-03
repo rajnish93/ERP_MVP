@@ -13,9 +13,15 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    """Schema for creating a new user"""
+    """Schema for creating a new user (inviting employee to portal)"""
     password: str = Field(..., min_length=8, max_length=72)  # bcrypt limit is 72 bytes
     role: UserRole = UserRole.EMPLOYEE
+    # Link to existing employee (if inviting an employee who already has an employee record)
+    employee_id: Optional[UUID] = Field(None, description="Optional: Link to existing employee record by employee UUID")
+    # Or create employee record if not linking (only used if employee_id is not provided)
+    department: Optional[str] = Field(None, min_length=1, max_length=100, description="Department name (used if creating new employee record)")
+    job_role: Optional[str] = Field(None, min_length=1, max_length=100, description="Job role/title (used if creating new employee record)")
+    joining_date: Optional[datetime] = Field(None, description="Employee joining date (used if creating new employee record)")
 
 
 class UserResponse(UserBase):

@@ -32,41 +32,44 @@ async def create_employee(
     **Access**: Admin and HR only
     
     **Tenant Isolation**: Employees are automatically assigned to the current user's company.
-    The user_id must belong to the same company.
     
     **Request**:
-    - user_id: User account ID (must exist and belong to same company)
+    - user_id: (Optional) User account ID to link employee to. If provided, must exist and belong to same company.
+               Employees can be created without user accounts (for employees not yet onboarded).
     - name: Employee full name
     - department: Department name
     - role: Job role/title
     - joining_date: Employee joining date
     - employee_id: Optional employee ID/code
     - phone: Optional phone number
+    
+    **Note**: All users must have employee records, but employees can exist without user accounts.
     """
-    # Verify user exists and belongs to same company
-    user = db.query(User).filter(User.id == employee_data.user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    if user.company_id != company_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User does not belong to your company"
-        )
-    
-    # Check if employee already exists for this user
-    existing_employee = db.query(Employee).filter(
-        Employee.user_id == employee_data.user_id,
-        Employee.company_id == company_id
-    ).first()
-    if existing_employee:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Employee record already exists for this user"
-        )
+    # If user_id is provided, verify user exists and belongs to same company
+    if employee_data.user_id:
+        user = db.query(User).filter(User.id == employee_data.user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        if user.company_id != company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User does not belong to your company"
+            )
+        
+        # Check if employee already exists for this user
+        existing_employee = db.query(Employee).filter(
+            Employee.user_id == employee_data.user_id,
+            Employee.company_id == company_id
+        ).first()
+        if existing_employee:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Employee record already exists for this user"
+            )
     
     # Check if employee_id is unique within company (if provided)
     if employee_data.employee_id:
@@ -80,10 +83,10 @@ async def create_employee(
                 detail=f"Employee ID '{employee_data.employee_id}' already exists in your company"
             )
     
-    # Create new employee
+    # Create new employee (user_id is optional)
     new_employee = Employee(
         company_id=company_id,  # Tenant isolation
-        user_id=employee_data.user_id,
+        user_id=employee_data.user_id,  # Can be None if employee doesn't have user account yet
         name=employee_data.name,
         department=employee_data.department,
         role=employee_data.role,
@@ -272,6 +275,32 @@ async def update_employee(
         employee.employee_id = employee_data.employee_id
     if employee_data.phone is not None:
         employee.phone = employee_data.phone
+    if employee_data.user_id is not None:
+        # If updating user_id, verify the user exists and belongs to same company
+        if employee_data.user_id != employee.user_id:
+            user = db.query(User).filter(User.id == employee_data.user_id).first()
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            if user.company_id != company_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="User does not belong to your company"
+                )
+            # Check if another employee already has this user_id
+            existing_employee_with_user = db.query(Employee).filter(
+                Employee.user_id == employee_data.user_id,
+                Employee.company_id == company_id,
+                Employee.id != employee_id
+            ).first()
+            if existing_employee_with_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Another employee already has this user account"
+                )
+        employee.user_id = employee_data.user_id
     if employee_data.is_active is not None:
         employee.is_active = employee_data.is_active
     

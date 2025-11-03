@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, List
-from sqlalchemy import String, Boolean, DateTime, CheckConstraint
+from sqlalchemy import String, Boolean, DateTime, CheckConstraint, UniqueConstraint, PrimaryKeyConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -26,22 +26,25 @@ class Company(Base):
     """Company (Tenant) model for multi-tenant SaaS"""
     __tablename__ = "companies"
     __table_args__ = (
+        PrimaryKeyConstraint('id', name='pk_companies_id'),
         CheckConstraint(
             "plan_type IN ('free', 'pro', 'enterprise')",
-            name="check_plan_type"
+            name="ck_companies_plan_type"
         ),
+        UniqueConstraint('email', name='uq_companies_email'),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), 
         primary_key=True, 
         default=uuid.uuid4, 
-        index=True
+        index=True,
+        comment="Primary key - explicitly named as pk_companies_id"
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     plan_type: Mapped[PlanType] = mapped_column(
-        EnumType(PlanType, length=20),
+        EnumType(PlanType, length=100),
         nullable=False,
         default=PlanType.FREE,
         server_default=PlanType.FREE.value

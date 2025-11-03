@@ -1,6 +1,6 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
+from sqlalchemy import engine_from_config, text, String
 from sqlalchemy import pool
 
 from alembic import context
@@ -10,6 +10,7 @@ from alembic.operations.ops import MigrationScript
 # Import your models and Base
 from app.core.database import Base
 from app.core.config import settings
+from app.core.types import EnumType
 # Import all models so Alembic can detect them
 from app.db.models import Company, User, Employee  # noqa: F401
 
@@ -33,6 +34,10 @@ target_metadata = Base.metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+
+
+# Enum types are now stored as strings with check constraints
+# No need for PostgreSQL enum type management
 
 
 def run_migrations_offline() -> None:
@@ -72,6 +77,8 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
 
+    # Enum types are now stored as strings with check constraints
+    # No enum type management needed
     with connectable.connect() as connection:
         def process_revision_directives(context, revision, directives):
             """
@@ -98,12 +105,31 @@ def run_migrations_online() -> None:
                     print("INFO: To create an empty migration manually, use: alembic revision -m 'message'")
                     return
 
+        def render_item(type_, obj, autogen_context):
+            """
+            Custom render function to convert EnumType to String in migrations.
+            This ensures migration files use sa.String() instead of app.core.types.EnumType or VARCHAR
+            """
+            # Only handle column type rendering
+            if type_ == "type":
+                # If this is an EnumType, render it as sa.String()
+                if isinstance(obj, EnumType):
+                    # Get the length from the EnumType instance
+                    length = getattr(obj, 'length', 50)
+                    # Return a string representation that will be written to the migration file
+                    # This ensures it's rendered as sa.String() not VARCHAR
+                    return f"sa.String(length={length})"
+            
+            # Return False to use default rendering for other types
+            return False
+
         context.configure(
             connection=connection, 
             target_metadata=target_metadata,
             process_revision_directives=process_revision_directives,
             compare_type=True,
             compare_server_default=True,
+            render_item=render_item,
         )
 
         with context.begin_transaction():

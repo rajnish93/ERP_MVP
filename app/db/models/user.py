@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Boolean, DateTime, Enum, ForeignKey
+from sqlalchemy import String, Boolean, DateTime, CheckConstraint, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -8,6 +8,7 @@ import enum
 import uuid
 
 from app.core.database import Base
+from app.core.types import EnumType
 
 if TYPE_CHECKING:
     from app.db.models.company import Company
@@ -24,6 +25,12 @@ class UserRole(str, enum.Enum):
 class User(Base):
     """User model for multi-tenant SaaS - belongs to a company"""
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('admin', 'hr', 'employee')",
+            name="check_user_role"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), 
@@ -41,9 +48,10 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole), 
-        nullable=False, 
-        default=UserRole.EMPLOYEE
+        EnumType(UserRole, length=20),
+        nullable=False,
+        default=UserRole.EMPLOYEE,
+        server_default=UserRole.EMPLOYEE.value
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

@@ -26,9 +26,9 @@ def get_db():
     Dependency function for getting database session.
     
     Usage:
-        @router.get("/items")
-        async def get_items(db: Session = Depends(get_db)):
-            return db.query(Item).all()
+        @router.get("/employees")
+        async def get_employees(db: Session = Depends(get_db)):
+            return db.query(Employee).filter(Employee.company_id == company_id).all()
     """
     db = SessionLocal()
     try:

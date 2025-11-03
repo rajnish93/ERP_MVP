@@ -46,7 +46,7 @@ services:
     command: >
       sh -c "
         echo 'Waiting for PostgreSQL...' &&
-        until pg_isready -h postgres -U postgres; do sleep 1; done &&
+        until python -c 'import psycopg2; psycopg2.connect(host=\"postgres\", user=\"postgres\", password=\"postgres\", dbname=\"erp_db\")' 2>/dev/null; do sleep 1; done &&
         echo 'Running database migrations...' &&
         alembic upgrade head &&
         echo 'Starting FastAPI application...' &&

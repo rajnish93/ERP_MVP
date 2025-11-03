@@ -1,8 +1,8 @@
 """initial
 
-Revision ID: 3377dd45ef5e
+Revision ID: dc059e948630
 Revises: 
-Create Date: 2025-11-02 20:01:16.389592
+Create Date: 2025-11-03 16:47:27.732843
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '3377dd45ef5e'
+revision: str = 'dc059e948630'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,10 +24,11 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('name', sa.String(length=200), nullable=False),
     sa.Column('email', sa.String(length=255), nullable=False),
-    sa.Column('plan_type', sa.Enum('FREE', 'PRO', 'ENTERPRISE', name='plantype'), nullable=False),
+    sa.Column('plan_type', sa.String(length=20), server_default='free', nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint("plan_type IN ('free', 'pro', 'enterprise')", name='check_plan_type'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_companies_email'), 'companies', ['email'], unique=True)
@@ -39,10 +40,11 @@ def upgrade() -> None:
     sa.Column('email', sa.String(length=255), nullable=False),
     sa.Column('hashed_password', sa.String(length=255), nullable=False),
     sa.Column('full_name', sa.String(length=100), nullable=False),
-    sa.Column('role', sa.Enum('ADMIN', 'HR', 'EMPLOYEE', name='userrole'), nullable=False),
+    sa.Column('role', sa.String(length=20), server_default='employee', nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint("role IN ('admin', 'hr', 'employee')", name='check_user_role'),
     sa.ForeignKeyConstraint(['company_id'], ['companies.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )

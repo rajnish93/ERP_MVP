@@ -81,7 +81,7 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_headers=["*"],
     )
 
-# Include API router under /api/v1 prefix (includes items endpoints)
+# Include API router under /api/v1 prefix
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 

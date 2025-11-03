@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, List
 from sqlalchemy import String, Boolean, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -11,6 +11,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.db.models.company import Company
     from app.db.models.user import User
+    from app.db.models.asset import Asset
 
 
 class Employee(Base):
@@ -83,4 +84,5 @@ class Employee(Base):
     # Relationships
     company: Mapped["Company"] = relationship("Company", back_populates="employees")
     user: Mapped[Optional["User"]] = relationship("User", back_populates="employee")
+    assets: Mapped[List["Asset"]] = relationship("Asset", back_populates="employee")
 

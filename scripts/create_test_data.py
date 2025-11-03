@@ -26,6 +26,7 @@ from app.core.security import get_password_hash
 from app.db.models.company import Company, PlanType
 from app.db.models.user import User, UserRole
 from app.db.models.employee import Employee
+from app.db.models.asset import Asset, AssetType, AssetStatus, AssetCondition
 
 # Initialize Faker with seed for reproducible data
 fake = Faker()
@@ -46,13 +47,21 @@ def generate_phone_number(max_length=20):
 
 
 def cleanup_existing_data(db: Session):
-    """Delete existing test data (employees, users, companies)"""
+    """Delete existing test data (assets, employees, users, companies)"""
     print("🧹 Cleaning up existing test data...")
     print("-" * 60)
     
     try:
         # Delete in correct order due to foreign key constraints
-        # 1. Delete employees first (they reference users and companies)
+        # 1. Delete assets first (they reference employees and companies)
+        asset_count = db.query(Asset).count()
+        if asset_count > 0:
+            db.query(Asset).delete(synchronize_session=False)
+            print(f"  ✅ Deleted {asset_count} assets")
+        else:
+            print("  ℹ️  No assets to delete")
+        
+        # 2. Delete employees (they reference users and companies)
         employee_count = db.query(Employee).count()
         if employee_count > 0:
             db.query(Employee).delete(synchronize_session=False)
@@ -60,7 +69,7 @@ def cleanup_existing_data(db: Session):
         else:
             print("  ℹ️  No employees to delete")
         
-        # 2. Delete users (they reference companies)
+        # 3. Delete users (they reference companies)
         user_count = db.query(User).count()
         if user_count > 0:
             db.query(User).delete(synchronize_session=False)
@@ -68,7 +77,7 @@ def cleanup_existing_data(db: Session):
         else:
             print("  ℹ️  No users to delete")
         
-        # 3. Delete companies (no dependencies)
+        # 4. Delete companies (no dependencies)
         company_count = db.query(Company).count()
         if company_count > 0:
             db.query(Company).delete(synchronize_session=False)
@@ -78,8 +87,8 @@ def cleanup_existing_data(db: Session):
         
         db.commit()
         
-        if employee_count > 0 or user_count > 0 or company_count > 0:
-            print(f"\n✅ Cleanup complete. Deleted {company_count} companies, {user_count} users, {employee_count} employees")
+        if asset_count > 0 or employee_count > 0 or user_count > 0 or company_count > 0:
+            print(f"\n✅ Cleanup complete. Deleted {company_count} companies, {user_count} users, {employee_count} employees, {asset_count} assets")
         else:
             print("\n✅ No existing data to clean up")
         
@@ -345,6 +354,121 @@ def create_test_data():
         db.commit()
         print(f"\n✅ Created {len(company_indices)} employees with user accounts")
         
+        # Scenario 6: Create assets for each company
+        print("\n💻 Creating Assets (5 assets per company)...")
+        print("-" * 60)
+        
+        # Asset templates with realistic names and types
+        asset_templates = [
+            {"name": "MacBook Pro 16", "type": AssetType.LAPTOP},
+            {"name": "Dell XPS 15", "type": AssetType.LAPTOP},
+            {"name": "LG UltraWide 34\" Monitor", "type": AssetType.MONITOR},
+            {"name": "Logitech MX Master 3", "type": AssetType.MOUSE},
+            {"name": "Keychron K2 Keyboard", "type": AssetType.KEYBOARD},
+        ]
+        
+        all_assets = []
+        
+        for company_idx, company_data in enumerate(created_companies):
+            company = company_data["company"]
+            
+            for asset_template in asset_templates:
+                # Generate serial number
+                serial_prefix = company.name[:3].upper().replace(" ", "").replace(",", "").replace(".", "")
+                serial_number = f"{serial_prefix}-{fake.bothify(text='####-????', letters='ABCDEFGHJKLMNPRSTUVWXYZ')}"
+                
+                # Random condition
+                condition = fake.random_element(elements=[
+                    AssetCondition.EXCELLENT,
+                    AssetCondition.GOOD,
+                    AssetCondition.GOOD,
+                    AssetCondition.FAIR,
+                    AssetCondition.FAIR
+                ])
+                
+                asset = Asset(
+                    company_id=company.id,
+                    name=asset_template["name"],
+                    asset_type=asset_template["type"],
+                    serial_number=serial_number,
+                    status=AssetStatus.AVAILABLE,  # Initially available
+                    condition=condition,
+                    assigned_to=None,
+                    issue_date=None
+                )
+                db.add(asset)
+                all_assets.append(asset)
+                
+                print(f"  ✅ {company.name}: {asset.name} (S/N: {serial_number}) - {condition.value}")
+        
+        db.commit()
+        print(f"\n✅ Created {len(all_assets)} assets across {len(created_companies)} companies")
+        
+        # Scenario 7: Assign assets to employees
+        print("\n📦 Assigning Assets to Employees...")
+        print("-" * 60)
+        
+        # Get all employees (including those with user accounts)
+        all_employees_list = db.query(Employee).all()
+        assigned_assets = []
+        
+        # Assign 2-3 assets per company to random employees
+        for company_idx, company_data in enumerate(created_companies):
+            company = company_data["company"]
+            company_assets = [a for a in all_assets if a.company_id == company.id]
+            company_employees = [e for e in all_employees_list if e.company_id == company.id]
+            
+            if not company_employees:
+                print(f"  ⚠️  {company.name}: No employees to assign assets to")
+                continue
+            
+            # Assign 2-3 random assets from this company
+            num_to_assign = min(3, len(company_assets))
+            assets_to_assign = fake.random_elements(elements=company_assets, length=num_to_assign, unique=True)
+            
+            for asset in assets_to_assign:
+                # Pick a random employee from this company
+                employee = fake.random_element(elements=company_employees)
+                
+                # Assign asset
+                asset.assigned_to = employee.id
+                asset.status = AssetStatus.ASSIGNED
+                asset.issue_date = fake.date_time_between(start_date="-6m", end_date="now", tzinfo=timezone.utc)
+                assigned_assets.append(asset)
+                
+                print(f"  ✅ {company.name}: {asset.name} → {employee.name} (assigned)")
+        
+        db.commit()
+        print(f"\n✅ Assigned {len(assigned_assets)} assets to employees")
+        
+        # Scenario 8: Unassign some assets
+        print("\n📤 Unassigning Some Assets...")
+        print("-" * 60)
+        
+        # Unassign 1-2 assets per company
+        unassigned_count = 0
+        for company_idx, company_data in enumerate(created_companies):
+            company = company_data["company"]
+            company_assigned_assets = [a for a in assigned_assets if a.company_id == company.id]
+            
+            if company_assigned_assets:
+                # Unassign 1 random asset
+                num_to_unassign = min(1, len(company_assigned_assets))
+                assets_to_unassign = fake.random_elements(elements=company_assigned_assets, length=num_to_unassign, unique=True)
+                
+                for asset in assets_to_unassign:
+                    employee_name = next((e.name for e in all_employees_list if e.id == asset.assigned_to), "Unknown")
+                    
+                    asset.assigned_to = None
+                    asset.status = AssetStatus.AVAILABLE
+                    asset.issue_date = None
+                    unassigned_count += 1
+                    
+                    print(f"  ✅ {company.name}: {asset.name} ← {employee_name} (unassigned)")
+        
+        db.commit()
+        print(f"\n✅ Unassigned {unassigned_count} assets")
+        
         # Summary
         print("\n" + "=" * 60)
         print("📊 TEST DATA SUMMARY")
@@ -369,6 +493,21 @@ def create_test_data():
         print(f"\n✅ Employees: {total_employees}")
         print(f"  - With user accounts: {employees_with_users}")
         print(f"  - Without user accounts: {employees_without_users}")
+        
+        total_assets = db.query(Asset).count()
+        assigned_assets_count = db.query(Asset).filter(Asset.assigned_to.isnot(None)).count()
+        available_assets_count = total_assets - assigned_assets_count
+        
+        print(f"\n✅ Assets: {total_assets}")
+        print(f"  - Assigned: {assigned_assets_count}")
+        print(f"  - Available: {available_assets_count}")
+        
+        # Asset breakdown by type
+        asset_types = db.query(Asset.asset_type).distinct().all()
+        for asset_type_tuple in asset_types:
+            asset_type = asset_type_tuple[0]
+            count = db.query(Asset).filter(Asset.asset_type == asset_type).count()
+            print(f"    - {asset_type.value}: {count}")
         
         print("\n" + "=" * 60)
         print("🎉 Test data creation completed successfully!")

@@ -20,17 +20,15 @@ RUN pip install uv
 # Set working directory
 WORKDIR /app
 
-# Copy only dependency files (for better Docker layer caching)
-# If requirements.txt changes, only this layer needs to be rebuilt
-COPY requirements.txt ./
+# Copy dependency files (for better Docker layer caching)
+# If pyproject.toml or uv.lock changes, only this layer needs to be rebuilt
+COPY pyproject.toml uv.lock* ./
 
-# Create a virtualenv in /app/.venv
-# This isolates dependencies from the system Python
-RUN uv venv /app/.venv
-
-# Install all Python dependencies into the virtualenv using UV
-# UV is 10-100x faster than pip for dependency resolution
-RUN uv pip install --python /app/.venv/bin/python -r requirements.txt
+# Sync dependencies from lock file into a virtualenv
+# UV sync reads pyproject.toml and uv.lock for deterministic installs
+# --frozen: Use exact versions from lock file (no updates)
+# --no-dev: Skip dev dependencies for production builds
+RUN uv sync --frozen --no-dev
 
 
 # -----------------------------------------------------------------------------
@@ -63,6 +61,10 @@ COPY --from=builder /app/.venv /app/.venv
 
 # Copy application code
 COPY ./app /app/app
+
+# Copy Alembic configuration and migrations
+COPY ./alembic /app/alembic
+COPY ./alembic.ini /app/alembic.ini
 
 # Expose port 8000 for the FastAPI application
 EXPOSE 8000

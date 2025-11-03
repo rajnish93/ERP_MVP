@@ -15,7 +15,11 @@ A production-ready FastAPI application with Docker containerization and Nginx re
 │   │       ├── __init__.py
 │   │       └── endpoints/
 │   │           ├── __init__.py
-│   │           └── items.py  # Example API endpoints
+│   │           ├── auth.py
+│   │           ├── companies.py
+│   │           ├── employees.py
+│   │           ├── password_reset.py
+│   │           └── users.py
 │   └── core/
 │       ├── __init__.py
 │       └── config.py         # Application settings
@@ -119,13 +123,6 @@ docker-compose up --build
 
 ### Health Check
 - `GET /health` - Health check endpoint
-
-### Items API (Example)
-- `GET /api/v1/items/` - Get all items
-- `GET /api/v1/items/{item_id}` - Get specific item
-- `POST /api/v1/items/` - Create new item
-- `PUT /api/v1/items/{item_id}` - Update item
-- `DELETE /api/v1/items/{item_id}` - Delete item
 
 ## Configuration
 

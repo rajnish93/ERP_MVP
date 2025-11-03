@@ -9,5 +9,18 @@ dependencies = [
     "uvicorn[standard]==0.38.0",
     "pydantic==2.12.3",
     "pydantic-settings==2.11.0",
+    "sqlalchemy==2.0.44",
+    "psycopg2-binary==2.9.11",
+    "alembic==1.17.1",
+    "email-validator==2.2.0",
+    "passlib[bcrypt]==1.7.4",
+    "bcrypt==4.0.1",
+    "python-jose[cryptography]==3.3.0",
+    "python-multipart==0.0.12",
+]
+
+[dependency-groups]
+dev = [
+    "faker>=37.12.0",
 ]
 

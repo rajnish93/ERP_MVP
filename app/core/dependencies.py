@@ -1,11 +1,14 @@
 from typing import Optional
+from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
+from sqlalchemy.orm import Session
 
 from app.core.security import decode_access_token
 from app.core.config import settings
-from app.models.user import User, UserRole, users_db
+from app.core.database import get_db
+from app.db.models.user import User, UserRole
 from app.schemas.user import TokenData
 
 # OAuth2 Password Flow scheme for token authentication
@@ -14,7 +17,7 @@ from app.schemas.user import TokenData
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/token")
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     """
     Get the current authenticated user from JWT token.
     
@@ -42,22 +45,31 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     
     # Extract email and company_id from token
     email: Optional[str] = payload.get("sub")
-    company_id_from_token: Optional[int] = payload.get("company_id")
+    company_id_str: Optional[str] = payload.get("company_id")
     
     if email is None:
         raise credentials_exception
     
-    # Find user by email
-    user = next((u for u in users_db if u.email == email), None)
+    # Find user by email in database
+    user = db.query(User).filter(User.email == email).first()
     if user is None:
         raise credentials_exception
     
     # Verify company_id matches (security check for tenant isolation)
-    if company_id_from_token is not None and user.company_id != company_id_from_token:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Token company mismatch - possible security issue"
-        )
+    # Convert string UUID from token to UUID object for comparison
+    if company_id_str is not None:
+        try:
+            company_id_from_token = UUID(company_id_str)
+            if user.company_id != company_id_from_token:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Token company mismatch - possible security issue"
+                )
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid company_id in token"
+            )
     
     if not user.is_active:
         raise HTTPException(
@@ -109,7 +121,7 @@ def require_employee_dependency():
 
 
 # Tenant isolation dependency - ensures data is scoped to user's company
-async def get_current_company_id(current_user: User = Depends(get_current_active_user)) -> int:
+async def get_current_company_id(current_user: User = Depends(get_current_active_user)) -> UUID:
     """
     Get the current user's company_id for tenant isolation.
     
@@ -118,19 +130,18 @@ async def get_current_company_id(current_user: User = Depends(get_current_active
     Usage:
         @router.get("/employees")
         async def get_employees(
-            company_id: int = Depends(get_current_company_id),
+            company_id: UUID = Depends(get_current_company_id),
             current_user: User = Depends(get_current_active_user)
         ):
             # Filter employees by company_id
-            employees = [e for e in employees_db if e.company_id == company_id]
+            employees = db.query(Employee).filter(Employee.company_id == company_id).all()
             return employees
     """
     return current_user.company_id
 
 
 # Helper to get users filtered by company
-def get_company_users(company_id: int):
+def get_company_users(company_id: UUID, db: Session):
     """Get all users for a specific company (tenant isolation)"""
-    from app.models.user import users_db
-    return [u for u in users_db if u.company_id == company_id]
+    return db.query(User).filter(User.company_id == company_id).all()
 

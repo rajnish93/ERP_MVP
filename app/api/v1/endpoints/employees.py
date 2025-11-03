@@ -1,9 +1,13 @@
 from typing import Optional
 from datetime import datetime
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
-from app.models.employee import Employee, employees_db
-from app.models.user import User, UserRole, users_db
+from app.core.database import get_db
+from app.db.models.employee import Employee
+from app.db.models.user import User, UserRole
 from app.core.dependencies import get_current_active_user, get_current_company_id, require_role
 from app.schemas.employee import (
     EmployeeCreate,
@@ -18,7 +22,8 @@ router = APIRouter()
 @router.post("/", response_model=EmployeeResponse, status_code=status.HTTP_201_CREATED)
 async def create_employee(
     employee_data: EmployeeCreate,
-    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_current_company_id),
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
@@ -27,61 +32,61 @@ async def create_employee(
     **Access**: Admin and HR only
     
     **Tenant Isolation**: Employees are automatically assigned to the current user's company.
-    The user_id must belong to the same company.
     
     **Request**:
-    - user_id: User account ID (must exist and belong to same company)
+    - user_id: (Optional) User account ID to link employee to. If provided, must exist and belong to same company.
+               Employees can be created without user accounts (for employees not yet onboarded).
     - name: Employee full name
     - department: Department name
     - role: Job role/title
     - joining_date: Employee joining date
     - employee_id: Optional employee ID/code
     - phone: Optional phone number
+    
+    **Note**: All users must have employee records, but employees can exist without user accounts.
     """
-    # Verify user exists and belongs to same company
-    user = next((u for u in users_db if u.id == employee_data.user_id), None)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    if user.company_id != company_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User does not belong to your company"
-        )
-    
-    # Check if employee already exists for this user
-    existing_employee = next(
-        (e for e in employees_db if e.user_id == employee_data.user_id and e.company_id == company_id),
-        None
-    )
-    if existing_employee:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Employee record already exists for this user"
-        )
+    # If user_id is provided, verify user exists and belongs to same company
+    if employee_data.user_id:
+        user = db.query(User).filter(User.id == employee_data.user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        if user.company_id != company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User does not belong to your company"
+            )
+        
+        # Check if employee already exists for this user
+        existing_employee = db.query(Employee).filter(
+            Employee.user_id == employee_data.user_id,
+            Employee.company_id == company_id
+        ).first()
+        if existing_employee:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Employee record already exists for this user"
+            )
     
     # Check if employee_id is unique within company (if provided)
     if employee_data.employee_id:
-        existing_emp_id = next(
-            (e for e in employees_db if e.employee_id == employee_data.employee_id and e.company_id == company_id),
-            None
-        )
+        existing_emp_id = db.query(Employee).filter(
+            Employee.employee_id == employee_data.employee_id,
+            Employee.company_id == company_id
+        ).first()
         if existing_emp_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Employee ID '{employee_data.employee_id}' already exists in your company"
             )
     
-    # Create new employee
-    import app.models.employee as employee_model
-    
+    # Create new employee (user_id is optional)
     new_employee = Employee(
-        id=employee_model.next_employee_id,
         company_id=company_id,  # Tenant isolation
-        user_id=employee_data.user_id,
+        user_id=employee_data.user_id,  # Can be None if employee doesn't have user account yet
         name=employee_data.name,
         department=employee_data.department,
         role=employee_data.role,
@@ -90,15 +95,30 @@ async def create_employee(
         phone=employee_data.phone,
         is_active=True,
     )
-    employees_db.append(new_employee)
-    employee_model.next_employee_id += 1
+    db.add(new_employee)
+    db.commit()
+    db.refresh(new_employee)
     
-    return EmployeeResponse(**new_employee.to_dict())
+    return EmployeeResponse(
+        id=new_employee.id,
+        company_id=new_employee.company_id,
+        user_id=new_employee.user_id,
+        name=new_employee.name,
+        department=new_employee.department,
+        role=new_employee.role,
+        joining_date=new_employee.joining_date,
+        employee_id=new_employee.employee_id,
+        phone=new_employee.phone,
+        is_active=new_employee.is_active,
+        created_at=new_employee.created_at,
+        updated_at=new_employee.updated_at,
+    )
 
 
 @router.get("/", response_model=EmployeeListResponse)
 async def get_employees(
-    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_current_company_id),
     current_user: User = Depends(get_current_active_user),
     department: Optional[str] = Query(None, description="Filter by department"),
     role: Optional[str] = Query(None, description="Filter by job role"),
@@ -118,39 +138,55 @@ async def get_employees(
     - is_active: Filter by active status (true/false)
     - search: Search by employee name or employee_id
     """
-    # Filter by company (tenant isolation)
-    company_employees = [e for e in employees_db if e.company_id == company_id]
+    # Base query - filter by company (tenant isolation)
+    query = db.query(Employee).filter(Employee.company_id == company_id)
     
     # Apply filters
-    filtered_employees = company_employees
-    
     if department:
-        filtered_employees = [e for e in filtered_employees if e.department.lower() == department.lower()]
+        query = query.filter(Employee.department.ilike(f"%{department}%"))
     
     if role:
-        filtered_employees = [e for e in filtered_employees if e.role.lower() == role.lower()]
+        query = query.filter(Employee.role.ilike(f"%{role}%"))
     
     if is_active is not None:
-        filtered_employees = [e for e in filtered_employees if e.is_active == is_active]
+        query = query.filter(Employee.is_active == is_active)
     
     if search:
-        search_lower = search.lower()
-        filtered_employees = [
-            e for e in filtered_employees
-            if search_lower in e.name.lower() or
-            (e.employee_id and search_lower in e.employee_id.lower())
-        ]
+        search_filter = or_(
+            Employee.name.ilike(f"%{search}%"),
+            Employee.employee_id.ilike(f"%{search}%")
+        )
+        query = query.filter(search_filter)
+    
+    employees = query.all()
     
     return EmployeeListResponse(
-        employees=[EmployeeResponse(**e.to_dict()) for e in filtered_employees],
-        total=len(filtered_employees)
+        employees=[
+            EmployeeResponse(
+                id=emp.id,
+                company_id=emp.company_id,
+                user_id=emp.user_id,
+                name=emp.name,
+                department=emp.department,
+                role=emp.role,
+                joining_date=emp.joining_date,
+                employee_id=emp.employee_id,
+                phone=emp.phone,
+                is_active=emp.is_active,
+                created_at=emp.created_at,
+                updated_at=emp.updated_at,
+            )
+            for emp in employees
+        ],
+        total=len(employees)
     )
 
 
 @router.get("/{employee_id}", response_model=EmployeeResponse)
 async def get_employee(
-    employee_id: int,
-    company_id: int = Depends(get_current_company_id),
+    employee_id: UUID,
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_current_company_id),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -160,24 +196,38 @@ async def get_employee(
     
     **Tenant Isolation**: Can only access employees from the same company.
     """
-    employee = next(
-        (e for e in employees_db if e.id == employee_id and e.company_id == company_id),
-        None
-    )
+    employee = db.query(Employee).filter(
+        Employee.id == employee_id,
+        Employee.company_id == company_id
+    ).first()
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Employee not found in your company"
         )
     
-    return EmployeeResponse(**employee.to_dict())
+    return EmployeeResponse(
+        id=employee.id,
+        company_id=employee.company_id,
+        user_id=employee.user_id,
+        name=employee.name,
+        department=employee.department,
+        role=employee.role,
+        joining_date=employee.joining_date,
+        employee_id=employee.employee_id,
+        phone=employee.phone,
+        is_active=employee.is_active,
+        created_at=employee.created_at,
+        updated_at=employee.updated_at,
+    )
 
 
 @router.put("/{employee_id}", response_model=EmployeeResponse)
 async def update_employee(
-    employee_id: int,
+    employee_id: UUID,
     employee_data: EmployeeUpdate,
-    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_current_company_id),
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
@@ -189,10 +239,10 @@ async def update_employee(
     
     **Request**: All fields are optional - only provided fields will be updated.
     """
-    employee = next(
-        (e for e in employees_db if e.id == employee_id and e.company_id == company_id),
-        None
-    )
+    employee = db.query(Employee).filter(
+        Employee.id == employee_id,
+        Employee.company_id == company_id
+    ).first()
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -201,13 +251,11 @@ async def update_employee(
     
     # Check if employee_id is unique within company (if being updated)
     if employee_data.employee_id and employee_data.employee_id != employee.employee_id:
-        existing_emp_id = next(
-            (e for e in employees_db 
-             if e.employee_id == employee_data.employee_id 
-             and e.company_id == company_id 
-             and e.id != employee_id),
-            None
-        )
+        existing_emp_id = db.query(Employee).filter(
+            Employee.employee_id == employee_data.employee_id,
+            Employee.company_id == company_id,
+            Employee.id != employee_id
+        ).first()
         if existing_emp_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -227,18 +275,59 @@ async def update_employee(
         employee.employee_id = employee_data.employee_id
     if employee_data.phone is not None:
         employee.phone = employee_data.phone
+    if employee_data.user_id is not None:
+        # If updating user_id, verify the user exists and belongs to same company
+        if employee_data.user_id != employee.user_id:
+            user = db.query(User).filter(User.id == employee_data.user_id).first()
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            if user.company_id != company_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="User does not belong to your company"
+                )
+            # Check if another employee already has this user_id
+            existing_employee_with_user = db.query(Employee).filter(
+                Employee.user_id == employee_data.user_id,
+                Employee.company_id == company_id,
+                Employee.id != employee_id
+            ).first()
+            if existing_employee_with_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Another employee already has this user account"
+                )
+        employee.user_id = employee_data.user_id
     if employee_data.is_active is not None:
         employee.is_active = employee_data.is_active
     
-    employee.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(employee)
     
-    return EmployeeResponse(**employee.to_dict())
+    return EmployeeResponse(
+        id=employee.id,
+        company_id=employee.company_id,
+        user_id=employee.user_id,
+        name=employee.name,
+        department=employee.department,
+        role=employee.role,
+        joining_date=employee.joining_date,
+        employee_id=employee.employee_id,
+        phone=employee.phone,
+        is_active=employee.is_active,
+        created_at=employee.created_at,
+        updated_at=employee.updated_at,
+    )
 
 
 @router.delete("/{employee_id}", status_code=status.HTTP_200_OK)
 async def delete_employee(
-    employee_id: int,
-    company_id: int = Depends(get_current_company_id),
+    employee_id: UUID,
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_current_company_id),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
     """
@@ -251,10 +340,10 @@ async def delete_employee(
     **Note**: This performs a soft delete (sets is_active=False) rather than
     removing the record completely.
     """
-    employee = next(
-        (e for e in employees_db if e.id == employee_id and e.company_id == company_id),
-        None
-    )
+    employee = db.query(Employee).filter(
+        Employee.id == employee_id,
+        Employee.company_id == company_id
+    ).first()
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -263,7 +352,6 @@ async def delete_employee(
     
     # Soft delete
     employee.is_active = False
-    employee.updated_at = datetime.utcnow()
+    db.commit()
     
     return {"message": "Employee deleted successfully", "employee_id": employee_id}
-

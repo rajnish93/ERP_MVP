@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional
+from uuid import UUID
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import secrets
@@ -70,7 +71,7 @@ def generate_password_reset_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def create_password_reset_token(email: str, company_id: int) -> str:
+def create_password_reset_token(email: str, company_id: UUID) -> str:
     """Create and store a password reset token"""
     token = generate_password_reset_token()
     expires_at = datetime.utcnow() + timedelta(minutes=15)  # 15 minute expiry

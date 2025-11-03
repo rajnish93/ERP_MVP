@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
-from app.models.user import users_db
+from app.core.database import get_db
+from app.db.models.user import User
 from app.core.security import (
     verify_password,
     get_password_hash,
@@ -14,7 +16,7 @@ router = APIRouter()
 
 
 @router.post("/forgot-password", response_model=dict)
-async def forgot_password(request: PasswordResetRequest):
+async def forgot_password(request: PasswordResetRequest, db: Session = Depends(get_db)):
     """
     Request a password reset.
     
@@ -28,7 +30,7 @@ async def forgot_password(request: PasswordResetRequest):
     **Response**: reset_token (use this in /reset-password endpoint)
     """
     # Find user by email
-    user = next((u for u in users_db if u.email == request.email), None)
+    user = db.query(User).filter(User.email == request.email).first()
     if not user:
         # Don't reveal if user exists (security best practice)
         return {
@@ -52,7 +54,7 @@ async def forgot_password(request: PasswordResetRequest):
 
 
 @router.post("/reset-password", response_model=PasswordResetResponse)
-async def reset_password(reset_data: PasswordReset):
+async def reset_password(reset_data: PasswordReset, db: Session = Depends(get_db)):
     """
     Reset password using the reset token.
     
@@ -71,7 +73,7 @@ async def reset_password(reset_data: PasswordReset):
         )
     
     # Find user
-    user = next((u for u in users_db if u.email == token_data["email"]), None)
+    user = db.query(User).filter(User.email == token_data["email"]).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -87,6 +89,7 @@ async def reset_password(reset_data: PasswordReset):
     
     # Update password
     user.hashed_password = get_password_hash(reset_data.new_password)
+    db.commit()
     
     # Invalidate reset token (one-time use)
     invalidate_password_reset_token(reset_data.token)

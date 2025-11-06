@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.db.models.company import Company
     from app.db.models.user import User
     from app.db.models.asset import Asset
+    from app.db.models.expense import Expense
 
 
 class Employee(Base):
@@ -85,4 +86,5 @@ class Employee(Base):
     company: Mapped["Company"] = relationship("Company", back_populates="employees")
     user: Mapped[Optional["User"]] = relationship("User", back_populates="employee")
     assets: Mapped[List["Asset"]] = relationship("Asset", back_populates="employee")
+    expenses: Mapped[List["Expense"]] = relationship("Expense", back_populates="employee")
 

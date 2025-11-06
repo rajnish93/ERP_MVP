@@ -1,0 +1,545 @@
+from typing import Optional
+from datetime import datetime, timezone
+from decimal import Decimal
+from uuid import UUID
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.orm import Session
+from sqlalchemy import or_, func as sql_func
+
+from app.core.database import get_db
+from app.db.models.expense import Expense, ExpenseStatus
+from app.db.models.employee import Employee
+from app.db.models.user import User, UserRole
+from app.core.dependencies import get_current_active_user, get_current_company_id, require_role
+from app.schemas.expense import (
+    ExpenseCreate,
+    ExpenseUpdate,
+    ExpenseApproval,
+    ExpenseRejection,
+    ExpenseResponse,
+    ExpenseDetailResponse,
+    ExpenseListResponse,
+)
+
+router = APIRouter()
+
+
+@router.post("/", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
+async def create_expense(
+    expense_data: ExpenseCreate,
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_current_company_id),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Submit a new expense for reimbursement.
+    
+    **Access**: All authenticated users (must have employee record)
+    
+    **Workflow**: Expense is created with status="pending" and requires HR/Admin approval.
+    
+    **Request**:
+    - title: Expense title
+    - amount: Expense amount (must be positive)
+    - description: Optional detailed description
+    - expense_date: Date when expense was incurred
+    - receipt_url: Optional URL/path to receipt file
+    """
+    # Get employee record for current user
+    employee = db.query(Employee).filter(
+        Employee.user_id == current_user.id,
+        Employee.company_id == company_id
+    ).first()
+    
+    if not employee:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employee record not found. Please contact HR to create your employee profile."
+        )
+    
+    # Use employee_id from request or current user's employee record
+    employee_id = expense_data.employee_id if expense_data.employee_id else employee.id
+    
+    # Verify employee belongs to same company
+    if employee_id != employee.id:
+        employee_check = db.query(Employee).filter(
+            Employee.id == employee_id,
+            Employee.company_id == company_id
+        ).first()
+        if not employee_check:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot submit expense for employee from another company"
+            )
+    
+    # Create new expense with pending status
+    new_expense = Expense(
+        company_id=company_id,
+        employee_id=employee_id,
+        title=expense_data.title,
+        amount=expense_data.amount,
+        description=expense_data.description,
+        expense_date=expense_data.expense_date,
+        status=ExpenseStatus.PENDING,
+        receipt_url=expense_data.receipt_url,
+        approved_by=None,
+        approved_at=None,
+        rejection_reason=None,
+    )
+    db.add(new_expense)
+    db.commit()
+    db.refresh(new_expense)
+    
+    return ExpenseResponse(
+        id=new_expense.id,
+        company_id=new_expense.company_id,
+        employee_id=new_expense.employee_id,
+        title=new_expense.title,
+        amount=new_expense.amount,
+        description=new_expense.description,
+        expense_date=new_expense.expense_date,
+        status=new_expense.status,
+        receipt_url=new_expense.receipt_url,
+        approved_by=new_expense.approved_by,
+        approved_at=new_expense.approved_at,
+        rejection_reason=new_expense.rejection_reason,
+        created_at=new_expense.created_at,
+        updated_at=new_expense.updated_at,
+    )
+
+
+@router.get("/", response_model=ExpenseListResponse)
+async def get_expenses(
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_current_company_id),
+    current_user: User = Depends(get_current_active_user),
+    status_filter: Optional[ExpenseStatus] = Query(None, alias="status", description="Filter by expense status"),
+    employee_id: Optional[UUID] = Query(None, description="Filter by employee ID"),
+    start_date: Optional[datetime] = Query(None, description="Filter by expense date (start)"),
+    end_date: Optional[datetime] = Query(None, description="Filter by expense date (end)"),
+    min_amount: Optional[Decimal] = Query(None, description="Minimum amount filter"),
+    max_amount: Optional[Decimal] = Query(None, description="Maximum amount filter"),
+    search: Optional[str] = Query(None, description="Search by title or description"),
+):
+    """
+    List expenses.
+    
+    **Access**: 
+    - Employees: Can only see their own expenses
+    - HR/Admin: Can see all expenses for their company
+    
+    **Filters**:
+    - status: Filter by expense status
+    - employee_id: Filter by employee (HR/Admin only)
+    - start_date/end_date: Filter by expense date range
+    - min_amount/max_amount: Filter by amount range
+    - search: Search by title or description
+    """
+    # Base query - tenant isolated
+    query = db.query(Expense).filter(Expense.company_id == company_id)
+    
+    # Employees can only see their own expenses
+    if current_user.role == UserRole.EMPLOYEE:
+        employee = db.query(Employee).filter(
+            Employee.user_id == current_user.id,
+            Employee.company_id == company_id
+        ).first()
+        
+        if not employee:
+            return ExpenseListResponse(expenses=[], total=0, total_amount=Decimal("0.00"))
+        
+        query = query.filter(Expense.employee_id == employee.id)
+    elif employee_id:
+        # HR/Admin can filter by employee
+        query = query.filter(Expense.employee_id == employee_id)
+    
+    # Apply filters
+    if status_filter:
+        query = query.filter(Expense.status == status_filter)
+    
+    if start_date:
+        query = query.filter(Expense.expense_date >= start_date)
+    
+    if end_date:
+        query = query.filter(Expense.expense_date <= end_date)
+    
+    if min_amount:
+        query = query.filter(Expense.amount >= min_amount)
+    
+    if max_amount:
+        query = query.filter(Expense.amount <= max_amount)
+    
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Expense.title.ilike(search_term),
+                Expense.description.ilike(search_term)
+            )
+        )
+    
+    # Get total count before pagination
+    total = query.count()
+    
+    # Calculate total amount
+    total_amount_result = query.with_entities(sql_func.sum(Expense.amount)).scalar()
+    total_amount = total_amount_result if total_amount_result else Decimal("0.00")
+    
+    expenses = query.order_by(Expense.created_at.desc()).all()
+    
+    return ExpenseListResponse(
+        expenses=[
+            ExpenseResponse(
+                id=expense.id,
+                company_id=expense.company_id,
+                employee_id=expense.employee_id,
+                title=expense.title,
+                amount=expense.amount,
+                description=expense.description,
+                expense_date=expense.expense_date,
+                status=expense.status,
+                receipt_url=expense.receipt_url,
+                approved_by=expense.approved_by,
+                approved_at=expense.approved_at,
+                rejection_reason=expense.rejection_reason,
+                created_at=expense.created_at,
+                updated_at=expense.updated_at,
+            )
+            for expense in expenses
+        ],
+        total=total,
+        total_amount=total_amount,
+    )
+
+
+@router.get("/{expense_id}", response_model=ExpenseDetailResponse)
+async def get_expense(
+    expense_id: UUID,
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_current_company_id),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Get expense details by ID.
+    
+    **Access**: 
+    - Employees: Can only view their own expenses
+    - HR/Admin: Can view any expense in their company
+    """
+    expense = db.query(Expense).filter(
+        Expense.id == expense_id,
+        Expense.company_id == company_id
+    ).first()
+    
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense not found"
+        )
+    
+    # Employees can only see their own expenses
+    if current_user.role == UserRole.EMPLOYEE:
+        employee = db.query(Employee).filter(
+            Employee.user_id == current_user.id,
+            Employee.company_id == company_id
+        ).first()
+        
+        if not employee or expense.employee_id != employee.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. You can only view your own expenses."
+            )
+    
+    # Get employee details
+    employee = db.query(Employee).filter(Employee.id == expense.employee_id).first()
+    employee_data = None
+    if employee:
+        employee_data = {
+            "id": str(employee.id),
+            "name": employee.name,
+            "department": employee.department,
+            "role": employee.role,
+            "employee_id": employee.employee_id,
+        }
+    
+    # Get approver details
+    approver_data = None
+    if expense.approved_by:
+        approver = db.query(User).filter(User.id == expense.approved_by).first()
+        if approver:
+            approver_data = {
+                "id": str(approver.id),
+                "full_name": approver.full_name,
+                "email": approver.email,
+                "role": approver.role.value,
+            }
+    
+    return ExpenseDetailResponse(
+        id=expense.id,
+        company_id=expense.company_id,
+        employee_id=expense.employee_id,
+        title=expense.title,
+        amount=expense.amount,
+        description=expense.description,
+        expense_date=expense.expense_date,
+        status=expense.status,
+        receipt_url=expense.receipt_url,
+        approved_by=expense.approved_by,
+        approved_at=expense.approved_at,
+        rejection_reason=expense.rejection_reason,
+        created_at=expense.created_at,
+        updated_at=expense.updated_at,
+        employee=employee_data,
+        approver=approver_data,
+    )
+
+
+@router.patch("/{expense_id}", response_model=ExpenseResponse)
+async def update_expense(
+    expense_id: UUID,
+    expense_data: ExpenseUpdate,
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_current_company_id),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Update an expense.
+    
+    **Access**: Employees can only update their own pending expenses.
+                  HR/Admin can update any expense.
+    
+    **Note**: Once approved or rejected, expenses cannot be updated by employees.
+    """
+    expense = db.query(Expense).filter(
+        Expense.id == expense_id,
+        Expense.company_id == company_id
+    ).first()
+    
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense not found"
+        )
+    
+    # Employees can only update their own pending expenses
+    if current_user.role == UserRole.EMPLOYEE:
+        employee = db.query(Employee).filter(
+            Employee.user_id == current_user.id,
+            Employee.company_id == company_id
+        ).first()
+        
+        if not employee or expense.employee_id != employee.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. You can only update your own expenses."
+            )
+        
+        if expense.status != ExpenseStatus.PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot update expense with status '{expense.status.value}'. Only pending expenses can be updated."
+            )
+    
+    # Update fields
+    update_data = expense_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(expense, field, value)
+    
+    db.commit()
+    db.refresh(expense)
+    
+    return ExpenseResponse(
+        id=expense.id,
+        company_id=expense.company_id,
+        employee_id=expense.employee_id,
+        title=expense.title,
+        amount=expense.amount,
+        description=expense.description,
+        expense_date=expense.expense_date,
+        status=expense.status,
+        receipt_url=expense.receipt_url,
+        approved_by=expense.approved_by,
+        approved_at=expense.approved_at,
+        rejection_reason=expense.rejection_reason,
+        created_at=expense.created_at,
+        updated_at=expense.updated_at,
+    )
+
+
+@router.post("/{expense_id}/approve", response_model=ExpenseResponse)
+async def approve_expense(
+    expense_id: UUID,
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_current_company_id),
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+):
+    """
+    Approve an expense for reimbursement.
+    
+    **Access**: Admin and HR only
+    
+    **Workflow**: Changes status from "pending" to "approved".
+                 Sets approved_by and approved_at fields.
+    """
+    expense = db.query(Expense).filter(
+        Expense.id == expense_id,
+        Expense.company_id == company_id
+    ).first()
+    
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense not found"
+        )
+    
+    if expense.status != ExpenseStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot approve expense with status '{expense.status.value}'. Only pending expenses can be approved."
+        )
+    
+    # Approve expense
+    expense.status = ExpenseStatus.APPROVED
+    expense.approved_by = current_user.id
+    expense.approved_at = datetime.now(timezone.utc)
+    expense.rejection_reason = None  # Clear any previous rejection reason
+    
+    db.commit()
+    db.refresh(expense)
+    
+    return ExpenseResponse(
+        id=expense.id,
+        company_id=expense.company_id,
+        employee_id=expense.employee_id,
+        title=expense.title,
+        amount=expense.amount,
+        description=expense.description,
+        expense_date=expense.expense_date,
+        status=expense.status,
+        receipt_url=expense.receipt_url,
+        approved_by=expense.approved_by,
+        approved_at=expense.approved_at,
+        rejection_reason=expense.rejection_reason,
+        created_at=expense.created_at,
+        updated_at=expense.updated_at,
+    )
+
+
+@router.post("/{expense_id}/reject", response_model=ExpenseResponse)
+async def reject_expense(
+    expense_id: UUID,
+    rejection_data: ExpenseRejection,
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_current_company_id),
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+):
+    """
+    Reject an expense.
+    
+    **Access**: Admin and HR only
+    
+    **Workflow**: Changes status from "pending" to "rejected".
+                 Sets approved_by, approved_at, and rejection_reason fields.
+    """
+    expense = db.query(Expense).filter(
+        Expense.id == expense_id,
+        Expense.company_id == company_id
+    ).first()
+    
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense not found"
+        )
+    
+    if expense.status != ExpenseStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot reject expense with status '{expense.status.value}'. Only pending expenses can be rejected."
+        )
+    
+    # Reject expense
+    expense.status = ExpenseStatus.REJECTED
+    expense.approved_by = current_user.id
+    expense.approved_at = datetime.now(timezone.utc)
+    expense.rejection_reason = rejection_data.rejection_reason
+    
+    db.commit()
+    db.refresh(expense)
+    
+    return ExpenseResponse(
+        id=expense.id,
+        company_id=expense.company_id,
+        employee_id=expense.employee_id,
+        title=expense.title,
+        amount=expense.amount,
+        description=expense.description,
+        expense_date=expense.expense_date,
+        status=expense.status,
+        receipt_url=expense.receipt_url,
+        approved_by=expense.approved_by,
+        approved_at=expense.approved_at,
+        rejection_reason=expense.rejection_reason,
+        created_at=expense.created_at,
+        updated_at=expense.updated_at,
+    )
+
+
+@router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_expense(
+    expense_id: UUID,
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_current_company_id),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Delete an expense.
+    
+    **Access**: Employees can only delete their own pending expenses.
+                  HR/Admin can delete any expense.
+    
+    **Note**: Approved or reimbursed expenses should not be deleted (consider marking as cancelled instead).
+    """
+    expense = db.query(Expense).filter(
+        Expense.id == expense_id,
+        Expense.company_id == company_id
+    ).first()
+    
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense not found"
+        )
+    
+    # Employees can only delete their own pending expenses
+    if current_user.role == UserRole.EMPLOYEE:
+        employee = db.query(Employee).filter(
+            Employee.user_id == current_user.id,
+            Employee.company_id == company_id
+        ).first()
+        
+        if not employee or expense.employee_id != employee.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. You can only delete your own expenses."
+            )
+        
+        if expense.status != ExpenseStatus.PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot delete expense with status '{expense.status.value}'. Only pending expenses can be deleted."
+            )
+    else:
+        # HR/Admin: Warn if deleting approved/reimbursed expense
+        if expense.status in [ExpenseStatus.APPROVED, ExpenseStatus.REIMBURSED]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot delete expense with status '{expense.status.value}'. Consider updating status instead."
+            )
+    
+    db.delete(expense)
+    db.commit()
+    
+    return None
+
+

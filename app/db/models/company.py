@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.db.models.user import User
     from app.db.models.employee import Employee
     from app.db.models.asset import Asset
+    from app.db.models.expense import Expense
 
 
 class PlanType(str, enum.Enum):
@@ -67,4 +68,5 @@ class Company(Base):
     users: Mapped[List["User"]] = relationship("User", back_populates="company", cascade="all, delete-orphan")
     employees: Mapped[List["Employee"]] = relationship("Employee", back_populates="company", cascade="all, delete-orphan")
     assets: Mapped[List["Asset"]] = relationship("Asset", back_populates="company", cascade="all, delete-orphan")
+    expenses: Mapped[List["Expense"]] = relationship("Expense", back_populates="company", cascade="all, delete-orphan")
 

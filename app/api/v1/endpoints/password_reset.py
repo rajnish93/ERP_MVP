@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.deps import SessionDep
 from app.db.models.user import User
 from app.core.security import (
     verify_password,
@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.post("/forgot-password", response_model=dict)
-async def forgot_password(request: PasswordResetRequest, db: Session = Depends(get_db)):
+async def forgot_password(request: PasswordResetRequest, db: SessionDep):
     """
     Request a password reset.
     
@@ -35,10 +35,7 @@ async def forgot_password(request: PasswordResetRequest, db: Session = Depends(g
         # Don't reveal if user exists (security best practice)
         return {
             "message": "If the email exists, a password reset token has been generated.",
-            # In production, don't return the token - send via email
-            "reset_token": None if not user else create_password_reset_token(
-                user.email, user.company_id
-            )
+            "reset_token": None
         }
     
     # Generate reset token
@@ -54,7 +51,7 @@ async def forgot_password(request: PasswordResetRequest, db: Session = Depends(g
 
 
 @router.post("/reset-password", response_model=PasswordResetResponse)
-async def reset_password(reset_data: PasswordReset, db: Session = Depends(get_db)):
+async def reset_password(reset_data: PasswordReset, db: SessionDep):
     """
     Reset password using the reset token.
     
@@ -89,7 +86,14 @@ async def reset_password(reset_data: PasswordReset, db: Session = Depends(get_db
     
     # Update password
     user.hashed_password = get_password_hash(reset_data.new_password)
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset password: {str(e)}"
+        )
     
     # Invalidate reset token (one-time use)
     invalidate_password_reset_token(reset_data.token)

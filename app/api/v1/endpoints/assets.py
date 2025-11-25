@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 
-from app.core.database import get_db
+from app.core.deps import SessionDep, CurrentCompanyId, CurrentUser
 from app.db.models.asset import Asset, AssetStatus
 from app.db.models.employee import Employee
 from app.db.models.user import User, UserRole
@@ -25,8 +25,8 @@ router = APIRouter()
 @router.post("/", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
 async def create_asset(
     asset_data: AssetCreate,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
@@ -44,10 +44,11 @@ async def create_asset(
     - status: Initial status (defaults to 'available')
     """
     # Check if serial_number is unique within company
-    existing_asset = db.query(Asset).filter(
+    stmt = select(Asset).where(
         Asset.serial_number == asset_data.serial_number,
         Asset.company_id == company_id
-    ).first()
+    )
+    existing_asset = db.execute(stmt).scalars().first()
     
     if existing_asset:
         raise HTTPException(
@@ -67,8 +68,15 @@ async def create_asset(
         issue_date=None,
     )
     db.add(new_asset)
-    db.commit()
-    db.refresh(new_asset)
+    try:
+        db.commit()
+        db.refresh(new_asset)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create asset: {str(e)}"
+        )
     
     return AssetResponse(
         id=new_asset.id,
@@ -87,9 +95,9 @@ async def create_asset(
 
 @router.get("/", response_model=AssetListResponse)
 async def get_assets(
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(get_current_active_user),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
     status_filter: Optional[AssetStatus] = Query(None, alias="status", description="Filter by asset status"),
     asset_type: Optional[str] = Query(None, description="Filter by asset type"),
     assigned: Optional[bool] = Query(None, description="Filter by assignment status (true=assigned, false=unassigned)"),
@@ -107,24 +115,24 @@ async def get_assets(
     - search: Search by name or serial number
     """
     # Base query - tenant isolated
-    query = db.query(Asset).filter(Asset.company_id == company_id)
+    stmt = select(Asset).where(Asset.company_id == company_id)
     
     # Apply filters
     if status_filter:
-        query = query.filter(Asset.status == status_filter)
+        stmt = stmt.where(Asset.status == status_filter)
     
     if asset_type:
-        query = query.filter(Asset.asset_type == asset_type)
+        stmt = stmt.where(Asset.asset_type == asset_type)
     
     if assigned is not None:
         if assigned:
-            query = query.filter(Asset.assigned_to.isnot(None))
+            stmt = stmt.where(Asset.assigned_to.isnot(None))
         else:
-            query = query.filter(Asset.assigned_to.is_(None))
+            stmt = stmt.where(Asset.assigned_to.is_(None))
     
     if search:
         search_term = f"%{search}%"
-        query = query.filter(
+        stmt = stmt.where(
             or_(
                 Asset.name.ilike(search_term),
                 Asset.serial_number.ilike(search_term)
@@ -134,18 +142,19 @@ async def get_assets(
     # Employees can only see assets assigned to them
     if current_user.role == UserRole.EMPLOYEE:
         # Get employee record for current user
-        employee = db.query(Employee).filter(
+        emp_stmt = select(Employee).where(
             Employee.user_id == current_user.id,
             Employee.company_id == company_id
-        ).first()
+        )
+        employee = db.execute(emp_stmt).scalars().first()
         
         if employee:
-            query = query.filter(Asset.assigned_to == employee.id)
+            stmt = stmt.where(Asset.assigned_to == employee.id)
         else:
             # Employee without employee record sees nothing
             return AssetListResponse(assets=[], total=0)
     
-    assets = query.order_by(Asset.created_at.desc()).all()
+    assets = db.execute(stmt.order_by(Asset.created_at.desc())).scalars().all()
     
     return AssetListResponse(
         assets=[
@@ -171,19 +180,20 @@ async def get_assets(
 @router.get("/{asset_id}", response_model=AssetDetailResponse)
 async def get_asset(
     asset_id: UUID,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(get_current_active_user),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
 ):
     """
     Get asset details by ID.
     
     **Access**: All authenticated users (Employees can only view assets assigned to them)
     """
-    asset = db.query(Asset).filter(
+    stmt = select(Asset).where(
         Asset.id == asset_id,
         Asset.company_id == company_id
-    ).first()
+    )
+    asset = db.execute(stmt).scalars().first()
     
     if not asset:
         raise HTTPException(
@@ -193,10 +203,11 @@ async def get_asset(
     
     # Employees can only see assets assigned to them
     if current_user.role == UserRole.EMPLOYEE:
-        employee = db.query(Employee).filter(
+        stmt = select(Employee).where(
             Employee.user_id == current_user.id,
             Employee.company_id == company_id
-        ).first()
+        )
+        employee = db.execute(stmt).scalars().first()
         
         if not employee or asset.assigned_to != employee.id:
             raise HTTPException(
@@ -207,14 +218,15 @@ async def get_asset(
     # Get employee details if assigned
     employee_data = None
     if asset.assigned_to:
-        employee = db.query(Employee).filter(Employee.id == asset.assigned_to).first()
-        if employee:
+        stmt = select(Employee).where(Employee.id == asset.assigned_to)
+        assigned_employee = db.execute(stmt).scalars().first()
+        if assigned_employee:
             employee_data = {
-                "id": str(employee.id),
-                "name": employee.name,
-                "department": employee.department,
-                "role": employee.role,
-                "employee_id": employee.employee_id,
+                "id": str(assigned_employee.id),
+                "name": assigned_employee.name,
+                "department": assigned_employee.department,
+                "role": assigned_employee.role,
+                "employee_id": assigned_employee.employee_id,
             }
     
     return AssetDetailResponse(
@@ -237,8 +249,8 @@ async def get_asset(
 async def update_asset(
     asset_id: UUID,
     asset_data: AssetUpdate,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
@@ -248,10 +260,11 @@ async def update_asset(
     
     **Note**: To assign/unassign assets, use the /assign endpoint.
     """
-    asset = db.query(Asset).filter(
+    stmt = select(Asset).where(
         Asset.id == asset_id,
         Asset.company_id == company_id
-    ).first()
+    )
+    asset = db.execute(stmt).scalars().first()
     
     if not asset:
         raise HTTPException(
@@ -261,11 +274,12 @@ async def update_asset(
     
     # Check if serial_number is unique (if being updated)
     if asset_data.serial_number and asset_data.serial_number != asset.serial_number:
-        existing_asset = db.query(Asset).filter(
+        stmt = select(Asset).where(
             Asset.serial_number == asset_data.serial_number,
             Asset.company_id == company_id,
             Asset.id != asset_id
-        ).first()
+        )
+        existing_asset = db.execute(stmt).scalars().first()
         
         if existing_asset:
             raise HTTPException(
@@ -278,8 +292,15 @@ async def update_asset(
     for field, value in update_data.items():
         setattr(asset, field, value)
     
-    db.commit()
-    db.refresh(asset)
+    try:
+        db.commit()
+        db.refresh(asset)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update asset: {str(e)}"
+        )
     
     return AssetResponse(
         id=asset.id,
@@ -300,8 +321,8 @@ async def update_asset(
 async def assign_asset(
     asset_id: UUID,
     assign_data: AssetAssign,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
@@ -315,10 +336,11 @@ async def assign_asset(
     **Note**: If asset is already assigned to another employee, it will be reassigned.
     Automatically sets status to 'assigned' and issue_date to current date.
     """
-    asset = db.query(Asset).filter(
+    stmt = select(Asset).where(
         Asset.id == asset_id,
         Asset.company_id == company_id
-    ).first()
+    )
+    asset = db.execute(stmt).scalars().first()
     
     if not asset:
         raise HTTPException(
@@ -327,10 +349,11 @@ async def assign_asset(
         )
     
     # Verify employee exists and belongs to same company
-    employee = db.query(Employee).filter(
+    stmt = select(Employee).where(
         Employee.id == assign_data.employee_id,
         Employee.company_id == company_id
-    ).first()
+    )
+    employee = db.execute(stmt).scalars().first()
     
     if not employee:
         raise HTTPException(
@@ -343,8 +366,15 @@ async def assign_asset(
     asset.status = AssetStatus.ASSIGNED
     asset.issue_date = datetime.now(timezone.utc)
     
-    db.commit()
-    db.refresh(asset)
+    try:
+        db.commit()
+        db.refresh(asset)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to assign asset: {str(e)}"
+        )
     
     return AssetResponse(
         id=asset.id,
@@ -364,8 +394,8 @@ async def assign_asset(
 @router.post("/{asset_id}/unassign", response_model=AssetResponse)
 async def unassign_asset(
     asset_id: UUID,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
@@ -375,10 +405,11 @@ async def unassign_asset(
     
     **Note**: Automatically sets status to 'available' and clears issue_date.
     """
-    asset = db.query(Asset).filter(
+    stmt = select(Asset).where(
         Asset.id == asset_id,
         Asset.company_id == company_id
-    ).first()
+    )
+    asset = db.execute(stmt).scalars().first()
     
     if not asset:
         raise HTTPException(
@@ -397,8 +428,15 @@ async def unassign_asset(
     asset.status = AssetStatus.AVAILABLE
     asset.issue_date = None
     
-    db.commit()
-    db.refresh(asset)
+    try:
+        db.commit()
+        db.refresh(asset)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unassign asset: {str(e)}"
+        )
     
     return AssetResponse(
         id=asset.id,
@@ -418,8 +456,8 @@ async def unassign_asset(
 @router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_asset(
     asset_id: UUID,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
     """
@@ -429,10 +467,11 @@ async def delete_asset(
     
     **Note**: Only unassigned assets can be deleted. Assign assets to 'retired' status instead of deleting.
     """
-    asset = db.query(Asset).filter(
+    stmt = select(Asset).where(
         Asset.id == asset_id,
         Asset.company_id == company_id
-    ).first()
+    )
+    asset = db.execute(stmt).scalars().first()
     
     if not asset:
         raise HTTPException(
@@ -446,8 +485,15 @@ async def delete_asset(
             detail="Cannot delete asset that is assigned to an employee. Unassign it first."
         )
     
-    db.delete(asset)
-    db.commit()
+    try:
+        db.delete(asset)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete asset: {str(e)}"
+        )
     
     return None
 

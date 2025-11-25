@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.db.models.expense import ExpenseStatus
 
@@ -52,8 +52,7 @@ class ExpenseResponse(ExpenseBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ExpenseDetailResponse(ExpenseResponse):
@@ -61,8 +60,7 @@ class ExpenseDetailResponse(ExpenseResponse):
     employee: Optional[dict] = Field(None, description="Employee details who submitted the expense")
     approver: Optional[dict] = Field(None, description="Approver user details if approved/rejected")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ExpenseListResponse(BaseModel):
@@ -70,5 +68,19 @@ class ExpenseListResponse(BaseModel):
     expenses: list[ExpenseResponse]
     total: int
     total_amount: Decimal = Field(..., description="Total amount of expenses in the list")
+
+
+class ExpenseSummaryResponse(BaseModel):
+    """Response schema for expense summary statistics"""
+    total_expenses: int = Field(..., description="Total number of expenses")
+    total_amount: Decimal = Field(..., description="Total amount of all expenses")
+    pending_expenses: int = Field(..., description="Total number of pending expenses")
+    pending_amount: Decimal = Field(..., description="Total amount of pending expenses")
+    approved_expenses: int = Field(..., description="Total number of approved expenses")
+    approved_amount: Decimal = Field(..., description="Total amount of approved expenses")
+    rejected_expenses: int = Field(..., description="Total number of rejected expenses")
+    rejected_amount: Decimal = Field(..., description="Total amount of rejected expenses")
+    reimbursed_expenses: int = Field(..., description="Total number of reimbursed expenses")
+    reimbursed_amount: Decimal = Field(..., description="Total amount of reimbursed expenses")
 
 

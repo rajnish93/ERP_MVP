@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
-from app.core.database import get_db
+from app.core.deps import SessionDep
 from app.db.models.company import Company, PlanType
 from app.db.models.user import User, UserRole
 from app.core.security import get_password_hash
@@ -11,7 +12,7 @@ router = APIRouter()
 
 
 @router.post("/signup", response_model=CompanySignupResponse, status_code=status.HTTP_201_CREATED)
-async def company_signup(company_data: CompanyCreate, db: Session = Depends(get_db)):
+async def company_signup(company_data: CompanyCreate, db: SessionDep):
     """
     Company signup endpoint - creates a new company (tenant) and initial Admin user.
     
@@ -35,7 +36,8 @@ async def company_signup(company_data: CompanyCreate, db: Session = Depends(get_
     - Admin creates employees and then invites them to the portal
     """
     # Check if company email already exists
-    existing_company = db.query(Company).filter(Company.email == company_data.email).first()
+    stmt = select(Company).where(Company.email == company_data.email)
+    existing_company = db.execute(stmt).scalars().first()
     if existing_company:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -43,7 +45,8 @@ async def company_signup(company_data: CompanyCreate, db: Session = Depends(get_
         )
     
     # Check if admin email already exists
-    existing_user = db.query(User).filter(User.email == company_data.admin_email).first()
+    stmt = select(User).where(User.email == company_data.admin_email)
+    existing_user = db.execute(stmt).scalars().first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -71,9 +74,16 @@ async def company_signup(company_data: CompanyCreate, db: Session = Depends(get_
         is_active=True,
     )
     db.add(admin_user)
-    db.commit()
-    db.refresh(new_company)
-    db.refresh(admin_user)
+    try:
+        db.commit()
+        db.refresh(new_company)
+        db.refresh(admin_user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create company: {str(e)}"
+        )
     
     return CompanySignupResponse(
         company=CompanyResponse(

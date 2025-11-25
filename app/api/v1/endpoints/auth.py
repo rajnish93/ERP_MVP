@@ -1,11 +1,12 @@
 from datetime import timedelta
+from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.security import verify_password, create_access_token
-from app.core.database import get_db
+from app.core.deps import SessionDep, OAuth2Form
 from app.db.models.user import User
 from app.schemas.user import Token
 
@@ -16,8 +17,8 @@ router = APIRouter()
 
 @router.post("/token", response_model=Token)
 async def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
+    form_data: OAuth2Form,
+    db: SessionDep
 ):
     """
     OAuth2 Password Flow token endpoint.
@@ -47,7 +48,8 @@ async def login_for_access_token(
     """
     # OAuth2PasswordRequestForm uses 'username' field, but we store email
     # Find user by email (email is passed as username in OAuth2 Password Flow)
-    user = db.query(User).filter(User.email == form_data.username).first()
+    stmt = select(User).where(User.email == form_data.username)
+    user = db.execute(stmt).scalars().first()
     
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -76,5 +78,3 @@ async def login_for_access_token(
     )
     
     return {"access_token": access_token, "token_type": "bearer"}
-
-

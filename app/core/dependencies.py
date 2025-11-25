@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.core.security import decode_access_token
 from app.core.config import settings
@@ -51,7 +52,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         raise credentials_exception
     
     # Find user by email in database
-    user = db.query(User).filter(User.email == email).first()
+    stmt = select(User).where(User.email == email)
+    user = db.execute(stmt).scalars().first()
     if user is None:
         raise credentials_exception
     
@@ -143,5 +145,6 @@ async def get_current_company_id(current_user: User = Depends(get_current_active
 # Helper to get users filtered by company
 def get_company_users(company_id: UUID, db: Session):
     """Get all users for a specific company (tenant isolation)"""
-    return db.query(User).filter(User.company_id == company_id).all()
+    stmt = select(User).where(User.company_id == company_id)
+    return db.execute(stmt).scalars().all()
 

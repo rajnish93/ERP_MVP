@@ -3,9 +3,9 @@ from datetime import datetime
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 
-from app.core.database import get_db
+from app.core.deps import SessionDep, CurrentCompanyId, CurrentUser
 from app.db.models.employee import Employee
 from app.db.models.user import User, UserRole
 from app.core.dependencies import get_current_active_user, get_current_company_id, require_role
@@ -22,8 +22,8 @@ router = APIRouter()
 @router.post("/", response_model=EmployeeResponse, status_code=status.HTTP_201_CREATED)
 async def create_employee(
     employee_data: EmployeeCreate,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
@@ -47,7 +47,8 @@ async def create_employee(
     """
     # If user_id is provided, verify user exists and belongs to same company
     if employee_data.user_id:
-        user = db.query(User).filter(User.id == employee_data.user_id).first()
+        stmt = select(User).where(User.id == employee_data.user_id)
+        user = db.execute(stmt).scalars().first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -61,10 +62,11 @@ async def create_employee(
             )
         
         # Check if employee already exists for this user
-        existing_employee = db.query(Employee).filter(
+        stmt = select(Employee).where(
             Employee.user_id == employee_data.user_id,
             Employee.company_id == company_id
-        ).first()
+        )
+        existing_employee = db.execute(stmt).scalars().first()
         if existing_employee:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -73,10 +75,11 @@ async def create_employee(
     
     # Check if employee_id is unique within company (if provided)
     if employee_data.employee_id:
-        existing_emp_id = db.query(Employee).filter(
+        stmt = select(Employee).where(
             Employee.employee_id == employee_data.employee_id,
             Employee.company_id == company_id
-        ).first()
+        )
+        existing_emp_id = db.execute(stmt).scalars().first()
         if existing_emp_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -96,8 +99,15 @@ async def create_employee(
         is_active=True,
     )
     db.add(new_employee)
-    db.commit()
-    db.refresh(new_employee)
+    try:
+        db.commit()
+        db.refresh(new_employee)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create employee: {str(e)}"
+        )
     
     return EmployeeResponse(
         id=new_employee.id,
@@ -117,9 +127,9 @@ async def create_employee(
 
 @router.get("/", response_model=EmployeeListResponse)
 async def get_employees(
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(get_current_active_user),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
     department: Optional[str] = Query(None, description="Filter by department"),
     role: Optional[str] = Query(None, description="Filter by job role"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
@@ -139,26 +149,26 @@ async def get_employees(
     - search: Search by employee name or employee_id
     """
     # Base query - filter by company (tenant isolation)
-    query = db.query(Employee).filter(Employee.company_id == company_id)
+    stmt = select(Employee).where(Employee.company_id == company_id)
     
     # Apply filters
     if department:
-        query = query.filter(Employee.department.ilike(f"%{department}%"))
+        stmt = stmt.where(Employee.department.ilike(f"%{department}%"))
     
     if role:
-        query = query.filter(Employee.role.ilike(f"%{role}%"))
+        stmt = stmt.where(Employee.role.ilike(f"%{role}%"))
     
     if is_active is not None:
-        query = query.filter(Employee.is_active == is_active)
+        stmt = stmt.where(Employee.is_active == is_active)
     
     if search:
         search_filter = or_(
             Employee.name.ilike(f"%{search}%"),
             Employee.employee_id.ilike(f"%{search}%")
         )
-        query = query.filter(search_filter)
+        stmt = stmt.where(search_filter)
     
-    employees = query.all()
+    employees = db.execute(stmt).scalars().all()
     
     return EmployeeListResponse(
         employees=[
@@ -185,9 +195,9 @@ async def get_employees(
 @router.get("/{employee_id}", response_model=EmployeeResponse)
 async def get_employee(
     employee_id: UUID,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(get_current_active_user),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
 ):
     """
     Get a specific employee by ID.
@@ -196,10 +206,11 @@ async def get_employee(
     
     **Tenant Isolation**: Can only access employees from the same company.
     """
-    employee = db.query(Employee).filter(
+    stmt = select(Employee).where(
         Employee.id == employee_id,
         Employee.company_id == company_id
-    ).first()
+    )
+    employee = db.execute(stmt).scalars().first()
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -226,8 +237,8 @@ async def get_employee(
 async def update_employee(
     employee_id: UUID,
     employee_data: EmployeeUpdate,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
@@ -239,10 +250,11 @@ async def update_employee(
     
     **Request**: All fields are optional - only provided fields will be updated.
     """
-    employee = db.query(Employee).filter(
+    stmt = select(Employee).where(
         Employee.id == employee_id,
         Employee.company_id == company_id
-    ).first()
+    )
+    employee = db.execute(stmt).scalars().first()
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -251,11 +263,12 @@ async def update_employee(
     
     # Check if employee_id is unique within company (if being updated)
     if employee_data.employee_id and employee_data.employee_id != employee.employee_id:
-        existing_emp_id = db.query(Employee).filter(
+        stmt = select(Employee).where(
             Employee.employee_id == employee_data.employee_id,
             Employee.company_id == company_id,
             Employee.id != employee_id
-        ).first()
+        )
+        existing_emp_id = db.execute(stmt).scalars().first()
         if existing_emp_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -278,7 +291,8 @@ async def update_employee(
     if employee_data.user_id is not None:
         # If updating user_id, verify the user exists and belongs to same company
         if employee_data.user_id != employee.user_id:
-            user = db.query(User).filter(User.id == employee_data.user_id).first()
+            stmt = select(User).where(User.id == employee_data.user_id)
+            user = db.execute(stmt).scalars().first()
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -290,11 +304,12 @@ async def update_employee(
                     detail="User does not belong to your company"
                 )
             # Check if another employee already has this user_id
-            existing_employee_with_user = db.query(Employee).filter(
+            stmt = select(Employee).where(
                 Employee.user_id == employee_data.user_id,
                 Employee.company_id == company_id,
                 Employee.id != employee_id
-            ).first()
+            )
+            existing_employee_with_user = db.execute(stmt).scalars().first()
             if existing_employee_with_user:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -304,8 +319,15 @@ async def update_employee(
     if employee_data.is_active is not None:
         employee.is_active = employee_data.is_active
     
-    db.commit()
-    db.refresh(employee)
+    try:
+        db.commit()
+        db.refresh(employee)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update employee: {str(e)}"
+        )
     
     return EmployeeResponse(
         id=employee.id,
@@ -326,8 +348,8 @@ async def update_employee(
 @router.delete("/{employee_id}", status_code=status.HTTP_200_OK)
 async def delete_employee(
     employee_id: UUID,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
     """
@@ -340,10 +362,11 @@ async def delete_employee(
     **Note**: This performs a soft delete (sets is_active=False) rather than
     removing the record completely.
     """
-    employee = db.query(Employee).filter(
+    stmt = select(Employee).where(
         Employee.id == employee_id,
         Employee.company_id == company_id
-    ).first()
+    )
+    employee = db.execute(stmt).scalars().first()
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -352,6 +375,13 @@ async def delete_employee(
     
     # Soft delete
     employee.is_active = False
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete employee: {str(e)}"
+        )
     
     return {"message": "Employee deleted successfully", "employee_id": employee_id}

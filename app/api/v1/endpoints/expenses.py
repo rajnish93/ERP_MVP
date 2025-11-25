@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func as sql_func
 
-from app.core.database import get_db
+from app.core.deps import SessionDep, CurrentUser, CurrentCompanyId
 from app.db.models.expense import Expense, ExpenseStatus
 from app.db.models.employee import Employee
 from app.db.models.user import User, UserRole
@@ -19,6 +19,7 @@ from app.schemas.expense import (
     ExpenseResponse,
     ExpenseDetailResponse,
     ExpenseListResponse,
+    ExpenseSummaryResponse,
 )
 
 router = APIRouter()
@@ -27,9 +28,9 @@ router = APIRouter()
 @router.post("/", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
 async def create_expense(
     expense_data: ExpenseCreate,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(get_current_active_user),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
 ):
     """
     Submit a new expense for reimbursement.
@@ -62,6 +63,13 @@ async def create_expense(
     
     # Verify employee belongs to same company
     if employee_id != employee.id:
+        # Only HR/Admin can submit expenses for other employees
+        if current_user.role == UserRole.EMPLOYEE:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only submit expenses for yourself"
+            )
+        
         employee_check = db.query(Employee).filter(
             Employee.id == employee_id,
             Employee.company_id == company_id
@@ -87,8 +95,15 @@ async def create_expense(
         rejection_reason=None,
     )
     db.add(new_expense)
-    db.commit()
-    db.refresh(new_expense)
+    try:
+        db.commit()
+        db.refresh(new_expense)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create expense: {str(e)}"
+        )
     
     return ExpenseResponse(
         id=new_expense.id,
@@ -108,11 +123,100 @@ async def create_expense(
     )
 
 
+@router.get("/summary", response_model=ExpenseSummaryResponse)
+async def get_expense_summary(
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
+):
+    """
+    Get expense summary statistics (total expenses and pending expenses).
+    
+    **Access**: 
+    - Employees: Can only see their own expense statistics
+    - HR/Admin: Can see all expense statistics for their company
+    
+    **Returns**:
+    - Total expenses count and amount
+    - Pending expenses count and amount
+    - Approved expenses count and amount
+    - Rejected expenses count and amount
+    - Reimbursed expenses count and amount
+    """
+    # Base query - tenant isolated
+    query = db.query(Expense).filter(Expense.company_id == company_id)
+    
+    # Employees can only see their own expenses
+    if current_user.role == UserRole.EMPLOYEE:
+        employee = db.query(Employee).filter(
+            Employee.user_id == current_user.id,
+            Employee.company_id == company_id
+        ).first()
+        
+        if not employee:
+            return ExpenseSummaryResponse(
+                total_expenses=0,
+                total_amount=Decimal("0.00"),
+                pending_expenses=0,
+                pending_amount=Decimal("0.00"),
+                approved_expenses=0,
+                approved_amount=Decimal("0.00"),
+                rejected_expenses=0,
+                rejected_amount=Decimal("0.00"),
+                reimbursed_expenses=0,
+                reimbursed_amount=Decimal("0.00"),
+            )
+        
+        query = query.filter(Expense.employee_id == employee.id)
+    
+    # Get total expenses count and amount
+    total_expenses = query.count()
+    total_amount_result = query.with_entities(sql_func.sum(Expense.amount)).scalar()
+    total_amount = total_amount_result if total_amount_result else Decimal("0.00")
+    
+    # Get pending expenses count and amount
+    pending_query = query.filter(Expense.status == ExpenseStatus.PENDING)
+    pending_expenses = pending_query.count()
+    pending_amount_result = pending_query.with_entities(sql_func.sum(Expense.amount)).scalar()
+    pending_amount = pending_amount_result if pending_amount_result else Decimal("0.00")
+    
+    # Get approved expenses count and amount
+    approved_query = query.filter(Expense.status == ExpenseStatus.APPROVED)
+    approved_expenses = approved_query.count()
+    approved_amount_result = approved_query.with_entities(sql_func.sum(Expense.amount)).scalar()
+    approved_amount = approved_amount_result if approved_amount_result else Decimal("0.00")
+    
+    # Get rejected expenses count and amount
+    rejected_query = query.filter(Expense.status == ExpenseStatus.REJECTED)
+    rejected_expenses = rejected_query.count()
+    rejected_amount_result = rejected_query.with_entities(sql_func.sum(Expense.amount)).scalar()
+    rejected_amount = rejected_amount_result if rejected_amount_result else Decimal("0.00")
+    
+    # Get reimbursed expenses count and amount
+    reimbursed_query = query.filter(Expense.status == ExpenseStatus.REIMBURSED)
+    reimbursed_expenses = reimbursed_query.count()
+    reimbursed_amount_result = reimbursed_query.with_entities(sql_func.sum(Expense.amount)).scalar()
+    reimbursed_amount = reimbursed_amount_result if reimbursed_amount_result else Decimal("0.00")
+    
+    return ExpenseSummaryResponse(
+        total_expenses=total_expenses,
+        total_amount=total_amount,
+        pending_expenses=pending_expenses,
+        pending_amount=pending_amount,
+        approved_expenses=approved_expenses,
+        approved_amount=approved_amount,
+        rejected_expenses=rejected_expenses,
+        rejected_amount=rejected_amount,
+        reimbursed_expenses=reimbursed_expenses,
+        reimbursed_amount=reimbursed_amount,
+    )
+
+
 @router.get("/", response_model=ExpenseListResponse)
 async def get_expenses(
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(get_current_active_user),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
     status_filter: Optional[ExpenseStatus] = Query(None, alias="status", description="Filter by expense status"),
     employee_id: Optional[UUID] = Query(None, description="Filter by employee ID"),
     start_date: Optional[datetime] = Query(None, description="Filter by expense date (start)"),
@@ -215,9 +319,9 @@ async def get_expenses(
 @router.get("/{expense_id}", response_model=ExpenseDetailResponse)
 async def get_expense(
     expense_id: UUID,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(get_current_active_user),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
 ):
     """
     Get expense details by ID.
@@ -298,9 +402,9 @@ async def get_expense(
 async def update_expense(
     expense_id: UUID,
     expense_data: ExpenseUpdate,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(get_current_active_user),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
 ):
     """
     Update an expense.
@@ -345,8 +449,15 @@ async def update_expense(
     for field, value in update_data.items():
         setattr(expense, field, value)
     
-    db.commit()
-    db.refresh(expense)
+    try:
+        db.commit()
+        db.refresh(expense)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update expense: {str(e)}"
+        )
     
     return ExpenseResponse(
         id=expense.id,
@@ -369,8 +480,8 @@ async def update_expense(
 @router.post("/{expense_id}/approve", response_model=ExpenseResponse)
 async def approve_expense(
     expense_id: UUID,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
@@ -404,8 +515,15 @@ async def approve_expense(
     expense.approved_at = datetime.now(timezone.utc)
     expense.rejection_reason = None  # Clear any previous rejection reason
     
-    db.commit()
-    db.refresh(expense)
+    try:
+        db.commit()
+        db.refresh(expense)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to approve expense: {str(e)}"
+        )
     
     return ExpenseResponse(
         id=expense.id,
@@ -429,8 +547,8 @@ async def approve_expense(
 async def reject_expense(
     expense_id: UUID,
     rejection_data: ExpenseRejection,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
@@ -464,8 +582,78 @@ async def reject_expense(
     expense.approved_at = datetime.now(timezone.utc)
     expense.rejection_reason = rejection_data.rejection_reason
     
-    db.commit()
-    db.refresh(expense)
+    try:
+        db.commit()
+        db.refresh(expense)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reject expense: {str(e)}"
+        )
+    
+    return ExpenseResponse(
+        id=expense.id,
+        company_id=expense.company_id,
+        employee_id=expense.employee_id,
+        title=expense.title,
+        amount=expense.amount,
+        description=expense.description,
+        expense_date=expense.expense_date,
+        status=expense.status,
+        receipt_url=expense.receipt_url,
+        approved_by=expense.approved_by,
+        approved_at=expense.approved_at,
+        rejection_reason=expense.rejection_reason,
+        created_at=expense.created_at,
+        updated_at=expense.updated_at,
+    )
+
+
+@router.post("/{expense_id}/reimburse", response_model=ExpenseResponse)
+async def reimburse_expense(
+    expense_id: UUID,
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+):
+    """
+    Mark an expense as reimbursed.
+    
+    **Access**: Admin and HR only
+    
+    **Workflow**: Changes status from "approved" to "reimbursed".
+                 This indicates the expense has been paid/reimbursed to the employee.
+    """
+    expense = db.query(Expense).filter(
+        Expense.id == expense_id,
+        Expense.company_id == company_id
+    ).first()
+    
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense not found"
+        )
+    
+    if expense.status != ExpenseStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot reimburse expense with status '{expense.status.value}'. Only approved expenses can be reimbursed."
+        )
+    
+    # Mark expense as reimbursed
+    expense.status = ExpenseStatus.REIMBURSED
+    
+    try:
+        db.commit()
+        db.refresh(expense)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reimburse expense: {str(e)}"
+        )
     
     return ExpenseResponse(
         id=expense.id,
@@ -488,9 +676,9 @@ async def reject_expense(
 @router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_expense(
     expense_id: UUID,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(get_current_active_user),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
 ):
     """
     Delete an expense.
@@ -537,8 +725,15 @@ async def delete_expense(
                 detail=f"Cannot delete expense with status '{expense.status.value}'. Consider updating status instead."
             )
     
-    db.delete(expense)
-    db.commit()
+    try:
+        db.delete(expense)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete expense: {str(e)}"
+        )
     
     return None
 

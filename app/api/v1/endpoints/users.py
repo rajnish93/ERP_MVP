@@ -2,12 +2,14 @@ from datetime import datetime, timezone
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.db.models.user import User, UserRole
 from app.db.models.employee import Employee
 from app.core.security import get_password_hash
 from app.core.database import get_db
 from app.core.dependencies import get_current_active_user, require_role, get_current_company_id
+from app.core.deps import SessionDep, CurrentUser, CurrentCompanyId
 from app.schemas.user import UserCreate, UserResponse
 
 router = APIRouter()
@@ -16,8 +18,8 @@ router = APIRouter()
 @router.post("/create", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
     user_data: UserCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: SessionDep,
+    current_user: CurrentUser,
 ):
     """
     Invite an employee to the portal - creates a user account and links to employee record.
@@ -57,7 +59,8 @@ async def create_user(
         )
     
     # Check if user with email already exists globally
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    stmt = select(User).where(User.email == user_data.email)
+    existing_user = db.execute(stmt).scalars().first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -70,10 +73,11 @@ async def create_user(
     # If employee_id is provided, link to existing employee
     if user_data.employee_id:
         # Verify employee exists and belongs to same company
-        existing_employee = db.query(Employee).filter(
+        stmt = select(Employee).where(
             Employee.id == user_data.employee_id,
             Employee.company_id == current_user.company_id
-        ).first()
+        )
+        existing_employee = db.execute(stmt).scalars().first()
         
         if not existing_employee:
             raise HTTPException(
@@ -121,8 +125,15 @@ async def create_user(
         )
         db.add(new_employee)
     
-    db.commit()
-    db.refresh(new_user)
+    try:
+        db.commit()
+        db.refresh(new_user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create user: {str(e)}"
+        )
     
     return UserResponse(
         id=new_user.id,
@@ -137,9 +148,9 @@ async def create_user(
 
 @router.get("/", response_model=list[UserResponse])
 async def get_company_users_endpoint(
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(get_current_active_user),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
 ):
     """
     Get all users for the current company (tenant).
@@ -148,7 +159,8 @@ async def get_company_users_endpoint(
     
     **Tenant Isolation**: Users can only see users from their own company.
     """
-    company_users = db.query(User).filter(User.company_id == company_id).all()
+    stmt = select(User).where(User.company_id == company_id)
+    company_users = db.execute(stmt).scalars().all()
     return [
         UserResponse(
             id=user.id,
@@ -164,7 +176,7 @@ async def get_company_users_endpoint(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
+async def get_current_user_info(current_user: CurrentUser):
     """
     Get current authenticated user information.
     
@@ -184,9 +196,9 @@ async def get_current_user_info(current_user: User = Depends(get_current_active_
 @router.put("/{user_id}/deactivate", response_model=UserResponse)
 async def deactivate_user(
     user_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-    company_id: UUID = Depends(get_current_company_id),
+    db: SessionDep,
+    current_user: CurrentUser,
+    company_id: CurrentCompanyId,
 ):
     """
     Deactivate a user in the current company.
@@ -202,10 +214,11 @@ async def deactivate_user(
         )
     
     # Find user - must be in same company
-    user = db.query(User).filter(
+    stmt = select(User).where(
         User.id == user_id,
         User.company_id == company_id
-    ).first()
+    )
+    user = db.execute(stmt).scalars().first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -220,8 +233,15 @@ async def deactivate_user(
         )
     
     user.is_active = False
-    db.commit()
-    db.refresh(user)
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to deactivate user: {str(e)}"
+        )
     
     return UserResponse(
         id=user.id,

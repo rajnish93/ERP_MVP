@@ -1,14 +1,10 @@
 from datetime import datetime, timezone
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
-
 from app.db.models.user import User, UserRole
 from app.db.models.employee import Employee
 from app.core.security import get_password_hash
-from app.core.database import get_db
-from app.core.dependencies import get_current_active_user, require_role, get_current_company_id
 from app.core.deps import SessionDep, CurrentUser, CurrentCompanyId
 from app.schemas.user import UserCreate, UserResponse
 

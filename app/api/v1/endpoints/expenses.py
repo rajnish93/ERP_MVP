@@ -3,18 +3,16 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import or_, func as sql_func
 
 from app.core.deps import SessionDep, CurrentUser, CurrentCompanyId
 from app.db.models.expense import Expense, ExpenseStatus
 from app.db.models.employee import Employee
 from app.db.models.user import User, UserRole
-from app.core.dependencies import get_current_active_user, get_current_company_id, require_role
+from app.core.dependencies import require_role
 from app.schemas.expense import (
     ExpenseCreate,
     ExpenseUpdate,
-    ExpenseApproval,
     ExpenseRejection,
     ExpenseResponse,
     ExpenseDetailResponse,
@@ -96,10 +94,10 @@ async def create_expense(
     )
     db.add(new_expense)
     try:
-        db.commit()
-        db.refresh(new_expense)
+        await db.commit()
+        await db.refresh(new_expense)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create expense: {str(e)}"
@@ -450,10 +448,10 @@ async def update_expense(
         setattr(expense, field, value)
     
     try:
-        db.commit()
-        db.refresh(expense)
+        await db.commit()
+        await db.refresh(expense)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update expense: {str(e)}"
@@ -516,10 +514,10 @@ async def approve_expense(
     expense.rejection_reason = None  # Clear any previous rejection reason
     
     try:
-        db.commit()
-        db.refresh(expense)
+        await db.commit()
+        await db.refresh(expense)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to approve expense: {str(e)}"
@@ -583,10 +581,10 @@ async def reject_expense(
     expense.rejection_reason = rejection_data.rejection_reason
     
     try:
-        db.commit()
-        db.refresh(expense)
+        await db.commit()
+        await db.refresh(expense)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to reject expense: {str(e)}"
@@ -646,10 +644,10 @@ async def reimburse_expense(
     expense.status = ExpenseStatus.REIMBURSED
     
     try:
-        db.commit()
-        db.refresh(expense)
+        await db.commit()
+        await db.refresh(expense)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to reimburse expense: {str(e)}"
@@ -727,9 +725,9 @@ async def delete_expense(
     
     try:
         db.delete(expense)
-        db.commit()
+        await db.commit()
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete expense: {str(e)}"

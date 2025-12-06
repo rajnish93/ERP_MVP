@@ -31,14 +31,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         # Custom messages for specific validation errors
         if error["type"] == "string_too_short":
             if "password" in field_name.lower():
-                msg = f"Password must be at least 8 characters long. Please choose a stronger password."
+                msg = "Password must be at least 8 characters long. Please choose a stronger password."
             else:
                 min_length = error.get("ctx", {}).get("min_length", "required")
                 msg = f"{field_name} is too short. Minimum length is {min_length} characters."
         
         elif error["type"] == "string_too_long":
             if "password" in field_name.lower():
-                msg = f"Password cannot exceed 72 characters."
+                msg = "Password cannot exceed 72 characters."
             else:
                 max_length = error.get("ctx", {}).get("max_length", "maximum")
                 msg = f"{field_name} is too long. Maximum length is {max_length} characters."

@@ -1,14 +1,12 @@
 from typing import Optional
-from datetime import datetime
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import or_, select
 
 from app.core.deps import SessionDep, CurrentCompanyId, CurrentUser
 from app.db.models.employee import Employee
 from app.db.models.user import User, UserRole
-from app.core.dependencies import get_current_active_user, get_current_company_id, require_role
+from app.core.dependencies import require_role
 from app.schemas.employee import (
     EmployeeCreate,
     EmployeeUpdate,
@@ -48,7 +46,7 @@ async def create_employee(
     # If user_id is provided, verify user exists and belongs to same company
     if employee_data.user_id:
         stmt = select(User).where(User.id == employee_data.user_id)
-        user = db.execute(stmt).scalars().first()
+        user = (await db.execute(stmt)).scalars().first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -66,7 +64,7 @@ async def create_employee(
             Employee.user_id == employee_data.user_id,
             Employee.company_id == company_id
         )
-        existing_employee = db.execute(stmt).scalars().first()
+        existing_employee = (await db.execute(stmt)).scalars().first()
         if existing_employee:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -79,7 +77,7 @@ async def create_employee(
             Employee.employee_id == employee_data.employee_id,
             Employee.company_id == company_id
         )
-        existing_emp_id = db.execute(stmt).scalars().first()
+        existing_emp_id = (await db.execute(stmt)).scalars().first()
         if existing_emp_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -100,10 +98,10 @@ async def create_employee(
     )
     db.add(new_employee)
     try:
-        db.commit()
-        db.refresh(new_employee)
+        await db.commit()
+        await db.refresh(new_employee)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create employee: {str(e)}"
@@ -168,7 +166,7 @@ async def get_employees(
         )
         stmt = stmt.where(search_filter)
     
-    employees = db.execute(stmt).scalars().all()
+    employees = (await db.execute(stmt)).scalars().all()
     
     return EmployeeListResponse(
         employees=[
@@ -210,7 +208,7 @@ async def get_employee(
         Employee.id == employee_id,
         Employee.company_id == company_id
     )
-    employee = db.execute(stmt).scalars().first()
+    employee = (await db.execute(stmt)).scalars().first()
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -254,7 +252,7 @@ async def update_employee(
         Employee.id == employee_id,
         Employee.company_id == company_id
     )
-    employee = db.execute(stmt).scalars().first()
+    employee = (await db.execute(stmt)).scalars().first()
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -268,7 +266,7 @@ async def update_employee(
             Employee.company_id == company_id,
             Employee.id != employee_id
         )
-        existing_emp_id = db.execute(stmt).scalars().first()
+        existing_emp_id = (await db.execute(stmt)).scalars().first()
         if existing_emp_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -292,7 +290,7 @@ async def update_employee(
         # If updating user_id, verify the user exists and belongs to same company
         if employee_data.user_id != employee.user_id:
             stmt = select(User).where(User.id == employee_data.user_id)
-            user = db.execute(stmt).scalars().first()
+            user = (await db.execute(stmt)).scalars().first()
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -309,7 +307,7 @@ async def update_employee(
                 Employee.company_id == company_id,
                 Employee.id != employee_id
             )
-            existing_employee_with_user = db.execute(stmt).scalars().first()
+            existing_employee_with_user = (await db.execute(stmt)).scalars().first()
             if existing_employee_with_user:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -320,10 +318,10 @@ async def update_employee(
         employee.is_active = employee_data.is_active
     
     try:
-        db.commit()
-        db.refresh(employee)
+        await db.commit()
+        await db.refresh(employee)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update employee: {str(e)}"
@@ -366,7 +364,7 @@ async def delete_employee(
         Employee.id == employee_id,
         Employee.company_id == company_id
     )
-    employee = db.execute(stmt).scalars().first()
+    employee = (await db.execute(stmt)).scalars().first()
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -376,9 +374,9 @@ async def delete_employee(
     # Soft delete
     employee.is_active = False
     try:
-        db.commit()
+        await db.commit()
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete employee: {str(e)}"

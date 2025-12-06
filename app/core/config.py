@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Union
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "erp_db"
     POSTGRES_HOST: str = "localhost"  # Default to localhost for local development
     POSTGRES_PORT: str = "5432"
+
+    # Database Connection Pool Settings
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_ECHO: bool = False  # Set to True for SQL query logging (useful for debugging)
     
     @field_validator("BACKEND_CORS_ORIGINS")
     @classmethod
@@ -70,7 +75,12 @@ class Settings(BaseSettings):
     
     @property
     def DATABASE_URL(self) -> str:
-        """Construct database URL from settings"""
+        """Construct async database URL from settings"""
+        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+
+    @property
+    def DATABASE_URL_SYNC(self) -> str:
+        """Construct sync database URL from settings (for Alembic and sync operations)"""
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
 

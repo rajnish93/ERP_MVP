@@ -2,15 +2,13 @@ from typing import Optional
 from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.security import decode_access_token
 from app.core.config import settings
 from app.core.database import get_db
 from app.db.models.user import User, UserRole
-from app.schemas.user import TokenData
 
 # OAuth2 Password Flow scheme for token authentication
 # This is FastAPI's built-in OAuth2 with Password Flow (and Bearer with JWT tokens)
@@ -18,7 +16,7 @@ from app.schemas.user import TokenData
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/token")
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
     """
     Get the current authenticated user from JWT token.
     
@@ -53,7 +51,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     
     # Find user by email in database
     stmt = select(User).where(User.email == email)
-    user = db.execute(stmt).scalars().first()
+    result = await db.execute(stmt)
+    user = result.scalars().first()
     if user is None:
         raise credentials_exception
     
@@ -143,8 +142,9 @@ async def get_current_company_id(current_user: User = Depends(get_current_active
 
 
 # Helper to get users filtered by company
-def get_company_users(company_id: UUID, db: Session):
+async def get_company_users(company_id: UUID, db: AsyncSession):
     """Get all users for a specific company (tenant isolation)"""
     stmt = select(User).where(User.company_id == company_id)
-    return db.execute(stmt).scalars().all()
+    result = await db.execute(stmt)
+    return result.scalars().all()
 

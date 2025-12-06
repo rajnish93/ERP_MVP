@@ -2,14 +2,13 @@ from typing import Optional
 from datetime import datetime, timezone
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import or_, select
 
 from app.core.deps import SessionDep, CurrentCompanyId, CurrentUser
 from app.db.models.asset import Asset, AssetStatus
 from app.db.models.employee import Employee
 from app.db.models.user import User, UserRole
-from app.core.dependencies import get_current_active_user, get_current_company_id, require_role
+from app.core.dependencies import require_role
 from app.schemas.asset import (
     AssetCreate,
     AssetUpdate,
@@ -48,7 +47,7 @@ async def create_asset(
         Asset.serial_number == asset_data.serial_number,
         Asset.company_id == company_id
     )
-    existing_asset = db.execute(stmt).scalars().first()
+    existing_asset = (await db.execute(stmt)).scalars().first()
     
     if existing_asset:
         raise HTTPException(
@@ -69,10 +68,10 @@ async def create_asset(
     )
     db.add(new_asset)
     try:
-        db.commit()
-        db.refresh(new_asset)
+        await db.commit()
+        await db.refresh(new_asset)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create asset: {str(e)}"
@@ -146,7 +145,7 @@ async def get_assets(
             Employee.user_id == current_user.id,
             Employee.company_id == company_id
         )
-        employee = db.execute(emp_stmt).scalars().first()
+        employee = (await db.execute(emp_stmt)).scalars().first()
         
         if employee:
             stmt = stmt.where(Asset.assigned_to == employee.id)
@@ -154,7 +153,7 @@ async def get_assets(
             # Employee without employee record sees nothing
             return AssetListResponse(assets=[], total=0)
     
-    assets = db.execute(stmt.order_by(Asset.created_at.desc())).scalars().all()
+    assets = (await db.execute(stmt.order_by(Asset.created_at.desc()))).scalars().all()
     
     return AssetListResponse(
         assets=[
@@ -207,7 +206,7 @@ async def get_asset(
             Employee.user_id == current_user.id,
             Employee.company_id == company_id
         )
-        employee = db.execute(stmt).scalars().first()
+        employee = (await db.execute(stmt)).scalars().first()
         
         if not employee or asset.assigned_to != employee.id:
             raise HTTPException(
@@ -219,7 +218,7 @@ async def get_asset(
     employee_data = None
     if asset.assigned_to:
         stmt = select(Employee).where(Employee.id == asset.assigned_to)
-        assigned_employee = db.execute(stmt).scalars().first()
+        assigned_employee = (await db.execute(stmt)).scalars().first()
         if assigned_employee:
             employee_data = {
                 "id": str(assigned_employee.id),
@@ -279,7 +278,7 @@ async def update_asset(
             Asset.company_id == company_id,
             Asset.id != asset_id
         )
-        existing_asset = db.execute(stmt).scalars().first()
+        existing_asset = (await db.execute(stmt)).scalars().first()
         
         if existing_asset:
             raise HTTPException(
@@ -293,10 +292,10 @@ async def update_asset(
         setattr(asset, field, value)
     
     try:
-        db.commit()
-        db.refresh(asset)
+        await db.commit()
+        await db.refresh(asset)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update asset: {str(e)}"
@@ -367,10 +366,10 @@ async def assign_asset(
     asset.issue_date = datetime.now(timezone.utc)
     
     try:
-        db.commit()
-        db.refresh(asset)
+        await db.commit()
+        await db.refresh(asset)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to assign asset: {str(e)}"
@@ -429,10 +428,10 @@ async def unassign_asset(
     asset.issue_date = None
     
     try:
-        db.commit()
-        db.refresh(asset)
+        await db.commit()
+        await db.refresh(asset)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to unassign asset: {str(e)}"
@@ -487,9 +486,9 @@ async def delete_asset(
     
     try:
         db.delete(asset)
-        db.commit()
+        await db.commit()
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete asset: {str(e)}"

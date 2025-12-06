@@ -1,7 +1,5 @@
 from datetime import timedelta
-from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.core.config import settings

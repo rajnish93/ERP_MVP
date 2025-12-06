@@ -1,10 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, status
 
 from app.core.deps import SessionDep
 from app.db.models.user import User
 from app.core.security import (
-    verify_password,
     get_password_hash,
     create_password_reset_token,
     verify_password_reset_token,
@@ -87,9 +85,9 @@ async def reset_password(reset_data: PasswordReset, db: SessionDep):
     # Update password
     user.hashed_password = get_password_hash(reset_data.new_password)
     try:
-        db.commit()
+        await db.commit()
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to reset password: {str(e)}"

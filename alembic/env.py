@@ -1,12 +1,9 @@
 from logging.config import fileConfig
 
 import sqlalchemy as sa
-from sqlalchemy import engine_from_config, text, String
 from sqlalchemy import pool
 
 from alembic import context
-from alembic.autogenerate import compare_metadata
-from alembic.operations.ops import MigrationScript
 
 # Import your models and Base
 from app.core.database import Base
@@ -24,8 +21,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set the database URL from settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Set the sync database URL from settings (Alembic needs sync connection)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL_SYNC)
 
 # add your model's MetaData object here
 # for 'autogenerate' support
@@ -72,9 +69,9 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    # Create sync engine explicitly for Alembic (uses psycopg2, no greenlet needed)
+    connectable = sa.create_engine(
+        settings.DATABASE_URL_SYNC,
         poolclass=pool.NullPool,
     )
 
@@ -125,7 +122,7 @@ def run_migrations_online() -> None:
             return False
 
         context.configure(
-            connection=connection, 
+            connection=connection,
             target_metadata=target_metadata,
             process_revision_directives=process_revision_directives,
             compare_type=True,

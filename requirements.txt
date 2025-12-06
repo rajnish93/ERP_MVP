@@ -6,6 +6,7 @@ email-validator==2.2.0
 # Database dependencies
 sqlalchemy==2.0.44
 psycopg2-binary==2.9.11
+asyncpg==0.30.0
 alembic==1.17.1
 # Authentication dependencies
 passlib[bcrypt]==1.7.4

@@ -56,7 +56,7 @@ async def create_user(
     
     # Check if user with email already exists globally
     stmt = select(User).where(User.email == user_data.email)
-    existing_user = db.execute(stmt).scalars().first()
+    existing_user = (await db.execute(stmt)).scalars().first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -73,7 +73,7 @@ async def create_user(
             Employee.id == user_data.employee_id,
             Employee.company_id == current_user.company_id
         )
-        existing_employee = db.execute(stmt).scalars().first()
+        existing_employee = (await db.execute(stmt)).scalars().first()
         
         if not existing_employee:
             raise HTTPException(
@@ -98,7 +98,7 @@ async def create_user(
         is_active=True,
     )
     db.add(new_user)
-    db.flush()  # Flush to get the new_user.id without committing
+    await db.flush()  # Flush to get the new_user.id without committing
     
     # Link to existing employee or create new employee record
     if user_data.employee_id:
@@ -122,10 +122,10 @@ async def create_user(
         db.add(new_employee)
     
     try:
-        db.commit()
-        db.refresh(new_user)
+        await db.commit()
+        await db.refresh(new_user)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create user: {str(e)}"
@@ -156,7 +156,7 @@ async def get_company_users_endpoint(
     **Tenant Isolation**: Users can only see users from their own company.
     """
     stmt = select(User).where(User.company_id == company_id)
-    company_users = db.execute(stmt).scalars().all()
+    company_users = (await db.execute(stmt)).scalars().all()
     return [
         UserResponse(
             id=user.id,
@@ -214,7 +214,7 @@ async def deactivate_user(
         User.id == user_id,
         User.company_id == company_id
     )
-    user = db.execute(stmt).scalars().first()
+    user = (await db.execute(stmt)).scalars().first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -230,10 +230,10 @@ async def deactivate_user(
     
     user.is_active = False
     try:
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to deactivate user: {str(e)}"

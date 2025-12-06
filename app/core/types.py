@@ -35,12 +35,20 @@ class EnumType(TypeDecorator, Generic[T]):
         """Convert string to enum when loading from database"""
         if value is None:
             return None
+        # If value is already an enum instance (shouldn't happen from DB, but handle gracefully)
         if isinstance(value, self.enum_class):
             return value
         try:
             return self.enum_class(value)
         except ValueError:
-            # If value doesn't match any enum member, return as-is
-            # This handles migration scenarios gracefully
-            return value
+            # If value doesn't match any enum member, log warning and return None
+            # This handles migration scenarios gracefully but prevents type errors
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Invalid enum value '{value}' for {self.enum_class.__name__}. "
+                f"Returning None. Valid values: {[e.value for e in self.enum_class]}"
+            )
+            return None
+
 

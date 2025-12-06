@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.core.deps import SessionDep
-from app.db.models.company import Company, PlanType
+from app.db.models.company import Company
 from app.db.models.user import User, UserRole
 from app.core.security import get_password_hash
 from app.schemas.company import CompanyCreate, CompanyResponse, CompanySignupResponse
@@ -61,7 +60,7 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
         is_active=True,
     )
     db.add(new_company)
-    db.flush()  # Flush to get the company ID without committing
+    await db.flush()  # Flush to get the company ID without committing
     
     # Create initial Admin user for this company (no employee record yet)
     hashed_password = get_password_hash(company_data.admin_password)
@@ -75,11 +74,11 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
     )
     db.add(admin_user)
     try:
-        db.commit()
-        db.refresh(new_company)
-        db.refresh(admin_user)
+        await db.commit()
+        await db.refresh(new_company)
+        await db.refresh(admin_user)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create company: {str(e)}"

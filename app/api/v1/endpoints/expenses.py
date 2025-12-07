@@ -95,8 +95,8 @@ async def create_expense(
         approved_at=None,
         rejection_reason=None,
     )
-    db.add(new_expense)
     async with handle_db_operation(db, "create expense"):
+        await db.add(new_expense)
         await db.commit()
         await db.refresh(new_expense)
     

@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 from datetime import datetime, timezone
 from uuid import UUID
@@ -20,6 +21,7 @@ from app.schemas.asset import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
@@ -67,8 +69,8 @@ async def create_asset(
         assigned_to=None,  # Initially unassigned
         issue_date=None,
     )
-    db.add(new_asset)
     async with handle_db_operation(db, "create asset"):
+        await db.add(new_asset)
         await db.commit()
         await db.refresh(new_asset)
     
@@ -347,6 +349,14 @@ async def assign_asset(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Employee not found in your company"
+        )
+    
+    # Check if asset is being reassigned from another employee
+    if asset.assigned_to and asset.assigned_to != assign_data.employee_id:
+        # Log the reassignment for audit trail
+        logger.warning(
+            f"Asset {asset.id} (serial: {asset.serial_number}) reassigned from employee "
+            f"{asset.assigned_to} to {assign_data.employee_id} by user {current_user.id}"
         )
     
     # Assign asset to employee

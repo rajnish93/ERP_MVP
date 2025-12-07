@@ -21,12 +21,14 @@ class Employee(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     - `user_id` is OPTIONAL - employees can exist without user accounts
       (e.g., employees not yet onboarded to the portal)
     - `employee_id` is OPTIONAL - human-readable employee code (e.g., "EMP-001")
+      and is unique per company, not globally
     - All users must have employee records, but employees can exist without user accounts
     - When downgrading migrations, employees with NULL user_id must be handled/deleted
     """
     __tablename__ = "employees"
     __table_args__ = (
         UniqueConstraint('user_id', name='uq_employees_user_id'),
+        UniqueConstraint('company_id', 'employee_id', name='uq_employees_company_employee_id'),
     )
 
     user_id: Mapped[Optional[UUID]] = mapped_column(
@@ -49,9 +51,8 @@ class Employee(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     employee_id: Mapped[Optional[str]] = mapped_column(
         String(50), 
         nullable=True, 
-        unique=True, 
         index=True, 
-        comment="Optional employee ID/code"
+        comment="Optional employee ID/code - unique per company"
     )
     phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

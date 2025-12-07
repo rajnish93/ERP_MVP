@@ -1,6 +1,6 @@
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Boolean, CheckConstraint, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import String, Boolean, UniqueConstraint, Index
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 import enum
 from app.core.database import Base, UUIDMixin, TimestampMixin, CompanyMixin
 from app.core.types import EnumType
@@ -21,18 +21,15 @@ class User(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     """User model for multi-tenant SaaS - belongs to a company"""
     __tablename__ = "users"
     __table_args__ = (
-        CheckConstraint(
-            "role IN ('admin', 'hr', 'employee')",
-            name="ck_users_role"
-        ),
-        UniqueConstraint('company_id', 'email', name='uq_users_company_email'),
+        UniqueConstraint("company_id", "email", name="uq_users_company_email"),
+        Index("ix_company_email", "company_id", "email"),
     )
 
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        EnumType(UserRole, length=100),
+        EnumType(UserRole),
         default=UserRole.EMPLOYEE,
         server_default=UserRole.EMPLOYEE.value,
         index=True,
@@ -43,8 +40,11 @@ class User(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     # Relationships
     company: Mapped["Company"] = relationship("Company", back_populates="users")
     employee: Mapped[Optional["Employee"]] = relationship(
-        "Employee", 
-        back_populates="user", 
-        uselist=False
+        "Employee",
+        back_populates="user",
+        uselist=False,
     )
 
+    @validates("email")
+    def validate_email(self, key, value: str) -> str:
+        return value.strip().lower()

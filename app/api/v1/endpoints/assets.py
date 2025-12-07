@@ -74,7 +74,7 @@ async def create_asset(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create asset: {str(e)}"
+            detail="Failed to create asset due to an internal server error."
         )
     
     return AssetResponse(
@@ -298,7 +298,7 @@ async def update_asset(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update asset: {str(e)}"
+            detail="Failed to update asset due to an internal server error."
         )
     
     return AssetResponse(
@@ -372,7 +372,7 @@ async def assign_asset(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to assign asset: {str(e)}"
+            detail="Failed to assign asset due to an internal server error."
         )
     
     return AssetResponse(
@@ -434,7 +434,7 @@ async def unassign_asset(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to unassign asset: {str(e)}"
+            detail="Failed to unassign asset due to an internal server error."
         )
     
     return AssetResponse(
@@ -491,7 +491,7 @@ async def delete_asset(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete asset: {str(e)}"
+            detail="Failed to delete asset due to an internal server error."
         )
     
     return None

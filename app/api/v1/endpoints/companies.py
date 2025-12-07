@@ -81,7 +81,7 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create company: {str(e)}"
+            detail="Failed to create company due to an internal server error."
         )
     
     return CompanySignupResponse(

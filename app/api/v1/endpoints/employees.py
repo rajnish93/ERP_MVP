@@ -104,7 +104,7 @@ async def create_employee(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create employee: {str(e)}"
+            detail="Failed to create employee due to an internal server error."
         )
     
     return EmployeeResponse(
@@ -324,7 +324,7 @@ async def update_employee(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update employee: {str(e)}"
+            detail="Failed to update employee due to an internal server error."
         )
     
     return EmployeeResponse(
@@ -379,7 +379,7 @@ async def delete_employee(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete employee: {str(e)}"
+            detail="Failed to delete employee due to an internal server error."
         )
     
     return {"message": "Employee deleted successfully", "employee_id": employee_id}

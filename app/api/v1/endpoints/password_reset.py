@@ -93,7 +93,7 @@ async def reset_password(reset_data: PasswordReset, db: SessionDep):
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to reset password: {str(e)}"
+            detail="Failed to reset password due to an internal server error."
         )
     
     # Invalidate reset token (one-time use)

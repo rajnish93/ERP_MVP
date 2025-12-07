@@ -128,7 +128,7 @@ async def create_user(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create user: {str(e)}"
+            detail="Failed to create user due to an internal server error."
         )
     
     return UserResponse(
@@ -236,7 +236,7 @@ async def deactivate_user(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to deactivate user: {str(e)}"
+            detail="Failed to deactivate user due to an internal server error."
         )
     
     return UserResponse(

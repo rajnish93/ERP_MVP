@@ -102,7 +102,7 @@ async def create_expense(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create expense: {str(e)}"
+            detail="Failed to create expense due to an internal server error."
         )
     
     return ExpenseResponse(
@@ -463,7 +463,7 @@ async def update_expense(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update expense: {str(e)}"
+            detail="Failed to update expense due to an internal server error."
         )
     
     return ExpenseResponse(
@@ -530,7 +530,7 @@ async def approve_expense(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to approve expense: {str(e)}"
+            detail="Failed to approve expense due to an internal server error."
         )
     
     return ExpenseResponse(
@@ -598,7 +598,7 @@ async def reject_expense(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to reject expense: {str(e)}"
+            detail="Failed to reject expense due to an internal server error."
         )
     
     return ExpenseResponse(
@@ -662,7 +662,7 @@ async def reimburse_expense(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to reimburse expense: {str(e)}"
+            detail="Failed to reimburse expense due to an internal server error."
         )
     
     return ExpenseResponse(
@@ -744,7 +744,7 @@ async def delete_expense(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete expense: {str(e)}"
+            detail="Failed to delete expense due to an internal server error."
         )
     
     return None

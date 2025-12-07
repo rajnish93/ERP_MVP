@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import or_, select
 
 from app.core.deps import SessionDep, CurrentCompanyId, CurrentUser
+from app.core.error_handlers import handle_db_operation
 from app.db.models.employee import Employee
 from app.db.models.user import User, UserRole
 from app.core.dependencies import require_role
@@ -97,15 +98,9 @@ async def create_employee(
         is_active=True,
     )
     db.add(new_employee)
-    try:
+    async with handle_db_operation(db, "create employee"):
         await db.commit()
         await db.refresh(new_employee)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create employee due to an internal server error."
-        )
     
     return EmployeeResponse(
         id=new_employee.id,
@@ -317,15 +312,9 @@ async def update_employee(
     if employee_data.is_active is not None:
         employee.is_active = employee_data.is_active
     
-    try:
+    async with handle_db_operation(db, "update employee"):
         await db.commit()
         await db.refresh(employee)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update employee due to an internal server error."
-        )
     
     return EmployeeResponse(
         id=employee.id,
@@ -373,13 +362,7 @@ async def delete_employee(
     
     # Soft delete
     employee.is_active = False
-    try:
+    async with handle_db_operation(db, "delete employee"):
         await db.commit()
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete employee due to an internal server error."
-        )
     
     return {"message": "Employee deleted successfully", "employee_id": employee_id}

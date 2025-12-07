@@ -6,6 +6,7 @@ from app.db.models.user import User, UserRole
 from app.db.models.employee import Employee
 from app.core.security import get_password_hash
 from app.core.deps import SessionDep, CurrentUser, CurrentCompanyId
+from app.core.error_handlers import handle_db_operation
 from app.schemas.user import UserCreate, UserResponse
 
 router = APIRouter()
@@ -121,15 +122,10 @@ async def create_user(
         )
         db.add(new_employee)
     
-    try:
+    # Commit transaction with automatic error handling
+    async with handle_db_operation(db, "create user"):
         await db.commit()
         await db.refresh(new_user)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create user due to an internal server error."
-        )
     
     return UserResponse(
         id=new_user.id,
@@ -228,16 +224,12 @@ async def deactivate_user(
             detail="Cannot deactivate yourself"
         )
     
+    # Deactivate user
     user.is_active = False
-    try:
+    
+    async with handle_db_operation(db, "deactivate user"):
         await db.commit()
         await db.refresh(user)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to deactivate user due to an internal server error."
-        )
     
     return UserResponse(
         id=user.id,

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.core.deps import SessionDep
+from app.core.error_handlers import handle_db_operation
 from app.db.models.company import Company
 from app.db.models.user import User, UserRole
 from app.core.security import get_password_hash
@@ -73,16 +74,10 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
         is_active=True,
     )
     db.add(admin_user)
-    try:
+    async with handle_db_operation(db, "create company"):
         await db.commit()
         await db.refresh(new_company)
         await db.refresh(admin_user)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create company due to an internal server error."
-        )
     
     return CompanySignupResponse(
         company=CompanyResponse(

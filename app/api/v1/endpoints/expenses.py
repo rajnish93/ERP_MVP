@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import or_, func as sql_func, select
 
 from app.core.deps import SessionDep, CurrentUser, CurrentCompanyId
+from app.core.error_handlers import handle_db_operation
 from app.db.models.expense import Expense, ExpenseStatus
 from app.db.models.employee import Employee
 from app.db.models.user import User, UserRole
@@ -95,15 +96,9 @@ async def create_expense(
         rejection_reason=None,
     )
     db.add(new_expense)
-    try:
+    async with handle_db_operation(db, "create expense"):
         await db.commit()
         await db.refresh(new_expense)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create expense due to an internal server error."
-        )
     
     return ExpenseResponse(
         id=new_expense.id,
@@ -456,15 +451,9 @@ async def update_expense(
     for field, value in update_data.items():
         setattr(expense, field, value)
     
-    try:
+    async with handle_db_operation(db, "update expense"):
         await db.commit()
         await db.refresh(expense)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update expense due to an internal server error."
-        )
     
     return ExpenseResponse(
         id=expense.id,
@@ -523,15 +512,9 @@ async def approve_expense(
     expense.approved_at = datetime.now(timezone.utc)
     expense.rejection_reason = None  # Clear any previous rejection reason
     
-    try:
+    async with handle_db_operation(db, "approve expense"):
         await db.commit()
         await db.refresh(expense)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to approve expense due to an internal server error."
-        )
     
     return ExpenseResponse(
         id=expense.id,
@@ -591,15 +574,9 @@ async def reject_expense(
     expense.approved_at = datetime.now(timezone.utc)
     expense.rejection_reason = rejection_data.rejection_reason
     
-    try:
+    async with handle_db_operation(db, "reject expense"):
         await db.commit()
         await db.refresh(expense)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to reject expense due to an internal server error."
-        )
     
     return ExpenseResponse(
         id=expense.id,
@@ -655,15 +632,9 @@ async def reimburse_expense(
     # Mark expense as reimbursed
     expense.status = ExpenseStatus.REIMBURSED
     
-    try:
+    async with handle_db_operation(db, "reimburse expense"):
         await db.commit()
         await db.refresh(expense)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to reimburse expense due to an internal server error."
-        )
     
     return ExpenseResponse(
         id=expense.id,
@@ -737,16 +708,8 @@ async def delete_expense(
                 detail=f"Cannot delete expense with status '{expense.status.value}'. Consider updating status instead."
             )
     
-    try:
-        db.delete(expense)
+    db.delete(expense)
+    async with handle_db_operation(db, "delete expense"):
         await db.commit()
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete expense due to an internal server error."
-        )
     
     return None
-
-

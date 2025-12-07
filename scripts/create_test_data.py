@@ -13,12 +13,13 @@ Usage:
 
 import asyncio
 import sys
-from pathlib import Path
-
-# Add parent directory to path to import app modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from datetime import timezone
+from pathlib import Path
+import re
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from faker import Faker
@@ -159,10 +160,9 @@ async def create_test_data():
             
             for company_data in companies_data:
                 # Create company
-                # Simple slug generation
-                slug_base = company_data["name"].lower().replace(",", "").replace(".", "").replace(" ", "-")
-                # Remove any other special chars if needed, for now this is fine for Faker data
-                slug = slug_base
+                # Generate valid slug: keep only alphanumeric and hyphens
+                slug_base = re.sub(r'[^a-z0-9]+', '-', company_data["name"].lower())
+                slug = slug_base.strip('-')[:50] # Remove leading/trailing hyphens, limit length
                 
                 company = Company(
                     name=company_data["name"],

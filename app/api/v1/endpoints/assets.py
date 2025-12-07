@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import or_, select
 
 from app.core.deps import SessionDep, CurrentCompanyId, CurrentUser
+from app.core.error_handlers import handle_db_operation
 from app.db.models.asset import Asset, AssetStatus
 from app.db.models.employee import Employee
 from app.db.models.user import User, UserRole
@@ -67,15 +68,9 @@ async def create_asset(
         issue_date=None,
     )
     db.add(new_asset)
-    try:
+    async with handle_db_operation(db, "create asset"):
         await db.commit()
         await db.refresh(new_asset)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create asset due to an internal server error."
-        )
     
     return AssetResponse(
         id=new_asset.id,
@@ -291,15 +286,9 @@ async def update_asset(
     for field, value in update_data.items():
         setattr(asset, field, value)
     
-    try:
+    async with handle_db_operation(db, "update asset"):
         await db.commit()
         await db.refresh(asset)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update asset due to an internal server error."
-        )
     
     return AssetResponse(
         id=asset.id,
@@ -365,15 +354,9 @@ async def assign_asset(
     asset.status = AssetStatus.ASSIGNED
     asset.issue_date = datetime.now(timezone.utc)
     
-    try:
+    async with handle_db_operation(db, "assign asset"):
         await db.commit()
         await db.refresh(asset)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to assign asset due to an internal server error."
-        )
     
     return AssetResponse(
         id=asset.id,
@@ -427,15 +410,9 @@ async def unassign_asset(
     asset.status = AssetStatus.AVAILABLE
     asset.issue_date = None
     
-    try:
+    async with handle_db_operation(db, "unassign asset"):
         await db.commit()
         await db.refresh(asset)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to unassign asset due to an internal server error."
-        )
     
     return AssetResponse(
         id=asset.id,
@@ -484,15 +461,8 @@ async def delete_asset(
             detail="Cannot delete asset that is assigned to an employee. Unassign it first."
         )
     
-    try:
+    async with handle_db_operation(db, "delete asset"):
         db.delete(asset)
         await db.commit()
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete asset due to an internal server error."
-        )
     
     return None
-

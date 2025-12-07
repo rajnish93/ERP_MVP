@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
+from sqlalchemy import select
 from app.core.deps import SessionDep
 from app.db.models.user import User
 from app.core.security import (
@@ -28,7 +29,8 @@ async def forgot_password(request: PasswordResetRequest, db: SessionDep):
     **Response**: reset_token (use this in /reset-password endpoint)
     """
     # Find user by email
-    user = db.query(User).filter(User.email == request.email).first()
+    stmt = select(User).where(User.email == request.email)
+    user = (await db.execute(stmt)).scalars().first()
     if not user:
         # Don't reveal if user exists (security best practice)
         return {
@@ -68,7 +70,8 @@ async def reset_password(reset_data: PasswordReset, db: SessionDep):
         )
     
     # Find user
-    user = db.query(User).filter(User.email == token_data["email"]).first()
+    stmt = select(User).where(User.email == token_data["email"])
+    user = (await db.execute(stmt)).scalars().first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

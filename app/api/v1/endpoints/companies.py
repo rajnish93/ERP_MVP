@@ -36,7 +36,7 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
     """
     # Check if company email already exists
     stmt = select(Company).where(Company.email == company_data.email)
-    existing_company = db.execute(stmt).scalars().first()
+    existing_company = (await db.execute(stmt)).scalars().first()
     if existing_company:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -45,7 +45,7 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
     
     # Check if admin email already exists
     stmt = select(User).where(User.email == company_data.admin_email)
-    existing_user = db.execute(stmt).scalars().first()
+    existing_user = (await db.execute(stmt)).scalars().first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

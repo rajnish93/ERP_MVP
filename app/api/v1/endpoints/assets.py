@@ -192,7 +192,7 @@ async def get_asset(
         Asset.id == asset_id,
         Asset.company_id == company_id
     )
-    asset = db.execute(stmt).scalars().first()
+    asset = (await db.execute(stmt)).scalars().first()
     
     if not asset:
         raise HTTPException(
@@ -263,7 +263,7 @@ async def update_asset(
         Asset.id == asset_id,
         Asset.company_id == company_id
     )
-    asset = db.execute(stmt).scalars().first()
+    asset = (await db.execute(stmt)).scalars().first()
     
     if not asset:
         raise HTTPException(
@@ -339,7 +339,7 @@ async def assign_asset(
         Asset.id == asset_id,
         Asset.company_id == company_id
     )
-    asset = db.execute(stmt).scalars().first()
+    asset = (await db.execute(stmt)).scalars().first()
     
     if not asset:
         raise HTTPException(
@@ -352,7 +352,7 @@ async def assign_asset(
         Employee.id == assign_data.employee_id,
         Employee.company_id == company_id
     )
-    employee = db.execute(stmt).scalars().first()
+    employee = (await db.execute(stmt)).scalars().first()
     
     if not employee:
         raise HTTPException(
@@ -408,7 +408,7 @@ async def unassign_asset(
         Asset.id == asset_id,
         Asset.company_id == company_id
     )
-    asset = db.execute(stmt).scalars().first()
+    asset = (await db.execute(stmt)).scalars().first()
     
     if not asset:
         raise HTTPException(
@@ -470,7 +470,7 @@ async def delete_asset(
         Asset.id == asset_id,
         Asset.company_id == company_id
     )
-    asset = db.execute(stmt).scalars().first()
+    asset = (await db.execute(stmt)).scalars().first()
     
     if not asset:
         raise HTTPException(

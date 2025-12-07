@@ -135,7 +135,8 @@ async def get_current_company_id(current_user: User = Depends(get_current_active
             current_user: User = Depends(get_current_active_user)
         ):
             # Filter employees by company_id
-            employees = db.query(Employee).filter(Employee.company_id == company_id).all()
+            stmt = select(Employee).where(Employee.company_id == company_id)
+            employees = (await db.execute(stmt)).scalars().all()
             return employees
     """
     return current_user.company_id

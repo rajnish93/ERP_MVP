@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import or_, func as sql_func
+from sqlalchemy import or_, func as sql_func, select
 
 from app.core.deps import SessionDep, CurrentUser, CurrentCompanyId
 from app.db.models.expense import Expense, ExpenseStatus
@@ -45,10 +45,11 @@ async def create_expense(
     - receipt_url: Optional URL/path to receipt file
     """
     # Get employee record for current user
-    employee = db.query(Employee).filter(
+    stmt = select(Employee).where(
         Employee.user_id == current_user.id,
         Employee.company_id == company_id
-    ).first()
+    )
+    employee = (await db.execute(stmt)).scalars().first()
     
     if not employee:
         raise HTTPException(
@@ -68,10 +69,11 @@ async def create_expense(
                 detail="You can only submit expenses for yourself"
             )
         
-        employee_check = db.query(Employee).filter(
+        stmt = select(Employee).where(
             Employee.id == employee_id,
             Employee.company_id == company_id
-        ).first()
+        )
+        employee_check = (await db.execute(stmt)).scalars().first()
         if not employee_check:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -141,15 +143,16 @@ async def get_expense_summary(
     - Rejected expenses count and amount
     - Reimbursed expenses count and amount
     """
-    # Base query - tenant isolated
-    query = db.query(Expense).filter(Expense.company_id == company_id)
+    # Base conditions - tenant isolated
+    conditions = [Expense.company_id == company_id]
     
     # Employees can only see their own expenses
     if current_user.role == UserRole.EMPLOYEE:
-        employee = db.query(Employee).filter(
+        stmt = select(Employee).where(
             Employee.user_id == current_user.id,
             Employee.company_id == company_id
-        ).first()
+        )
+        employee = (await db.execute(stmt)).scalars().first()
         
         if not employee:
             return ExpenseSummaryResponse(
@@ -165,36 +168,32 @@ async def get_expense_summary(
                 reimbursed_amount=Decimal("0.00"),
             )
         
-        query = query.filter(Expense.employee_id == employee.id)
+        conditions.append(Expense.employee_id == employee.id)
     
+    # Helper to get stats
+    async def get_stats(extra_conds=None):
+        where_conds = conditions + (extra_conds or [])
+        count_stmt = select(sql_func.count(Expense.id)).where(*where_conds)
+        sum_stmt = select(sql_func.sum(Expense.amount)).where(*where_conds)
+        
+        count = (await db.execute(count_stmt)).scalar() or 0
+        amount = (await db.execute(sum_stmt)).scalar() or Decimal("0.00")
+        return count, amount
+
     # Get total expenses count and amount
-    total_expenses = query.count()
-    total_amount_result = query.with_entities(sql_func.sum(Expense.amount)).scalar()
-    total_amount = total_amount_result if total_amount_result else Decimal("0.00")
+    total_expenses, total_amount = await get_stats()
     
     # Get pending expenses count and amount
-    pending_query = query.filter(Expense.status == ExpenseStatus.PENDING)
-    pending_expenses = pending_query.count()
-    pending_amount_result = pending_query.with_entities(sql_func.sum(Expense.amount)).scalar()
-    pending_amount = pending_amount_result if pending_amount_result else Decimal("0.00")
+    pending_expenses, pending_amount = await get_stats([Expense.status == ExpenseStatus.PENDING])
     
     # Get approved expenses count and amount
-    approved_query = query.filter(Expense.status == ExpenseStatus.APPROVED)
-    approved_expenses = approved_query.count()
-    approved_amount_result = approved_query.with_entities(sql_func.sum(Expense.amount)).scalar()
-    approved_amount = approved_amount_result if approved_amount_result else Decimal("0.00")
+    approved_expenses, approved_amount = await get_stats([Expense.status == ExpenseStatus.APPROVED])
     
     # Get rejected expenses count and amount
-    rejected_query = query.filter(Expense.status == ExpenseStatus.REJECTED)
-    rejected_expenses = rejected_query.count()
-    rejected_amount_result = rejected_query.with_entities(sql_func.sum(Expense.amount)).scalar()
-    rejected_amount = rejected_amount_result if rejected_amount_result else Decimal("0.00")
+    rejected_expenses, rejected_amount = await get_stats([Expense.status == ExpenseStatus.REJECTED])
     
     # Get reimbursed expenses count and amount
-    reimbursed_query = query.filter(Expense.status == ExpenseStatus.REIMBURSED)
-    reimbursed_expenses = reimbursed_query.count()
-    reimbursed_amount_result = reimbursed_query.with_entities(sql_func.sum(Expense.amount)).scalar()
-    reimbursed_amount = reimbursed_amount_result if reimbursed_amount_result else Decimal("0.00")
+    reimbursed_expenses, reimbursed_amount = await get_stats([Expense.status == ExpenseStatus.REIMBURSED])
     
     return ExpenseSummaryResponse(
         total_expenses=total_expenses,
@@ -237,57 +236,61 @@ async def get_expenses(
     - min_amount/max_amount: Filter by amount range
     - search: Search by title or description
     """
-    # Base query - tenant isolated
-    query = db.query(Expense).filter(Expense.company_id == company_id)
+    # Base conditions - tenant isolated
+    conditions = [Expense.company_id == company_id]
     
     # Employees can only see their own expenses
     if current_user.role == UserRole.EMPLOYEE:
-        employee = db.query(Employee).filter(
+        stmt = select(Employee).where(
             Employee.user_id == current_user.id,
             Employee.company_id == company_id
-        ).first()
+        )
+        employee = (await db.execute(stmt)).scalars().first()
         
         if not employee:
             return ExpenseListResponse(expenses=[], total=0, total_amount=Decimal("0.00"))
         
-        query = query.filter(Expense.employee_id == employee.id)
+        conditions.append(Expense.employee_id == employee.id)
     elif employee_id:
         # HR/Admin can filter by employee
-        query = query.filter(Expense.employee_id == employee_id)
+        conditions.append(Expense.employee_id == employee_id)
     
     # Apply filters
     if status_filter:
-        query = query.filter(Expense.status == status_filter)
+        conditions.append(Expense.status == status_filter)
     
     if start_date:
-        query = query.filter(Expense.expense_date >= start_date)
+        conditions.append(Expense.expense_date >= start_date)
     
     if end_date:
-        query = query.filter(Expense.expense_date <= end_date)
+        conditions.append(Expense.expense_date <= end_date)
     
     if min_amount:
-        query = query.filter(Expense.amount >= min_amount)
+        conditions.append(Expense.amount >= min_amount)
     
     if max_amount:
-        query = query.filter(Expense.amount <= max_amount)
+        conditions.append(Expense.amount <= max_amount)
     
     if search:
         search_term = f"%{search}%"
-        query = query.filter(
+        conditions.append(
             or_(
                 Expense.title.ilike(search_term),
                 Expense.description.ilike(search_term)
             )
         )
     
-    # Get total count before pagination
-    total = query.count()
+    # Get total count
+    count_stmt = select(sql_func.count(Expense.id)).where(*conditions)
+    total = (await db.execute(count_stmt)).scalar() or 0
     
     # Calculate total amount
-    total_amount_result = query.with_entities(sql_func.sum(Expense.amount)).scalar()
-    total_amount = total_amount_result if total_amount_result else Decimal("0.00")
+    sum_stmt = select(sql_func.sum(Expense.amount)).where(*conditions)
+    total_amount = (await db.execute(sum_stmt)).scalar() or Decimal("0.00")
     
-    expenses = query.order_by(Expense.created_at.desc()).all()
+    # Get expenses
+    stmt = select(Expense).where(*conditions).order_by(Expense.created_at.desc())
+    expenses = (await db.execute(stmt)).scalars().all()
     
     return ExpenseListResponse(
         expenses=[
@@ -328,10 +331,11 @@ async def get_expense(
     - Employees: Can only view their own expenses
     - HR/Admin: Can view any expense in their company
     """
-    expense = db.query(Expense).filter(
+    stmt = select(Expense).where(
         Expense.id == expense_id,
         Expense.company_id == company_id
-    ).first()
+    )
+    expense = (await db.execute(stmt)).scalars().first()
     
     if not expense:
         raise HTTPException(
@@ -341,10 +345,11 @@ async def get_expense(
     
     # Employees can only see their own expenses
     if current_user.role == UserRole.EMPLOYEE:
-        employee = db.query(Employee).filter(
+        stmt = select(Employee).where(
             Employee.user_id == current_user.id,
             Employee.company_id == company_id
-        ).first()
+        )
+        employee = (await db.execute(stmt)).scalars().first()
         
         if not employee or expense.employee_id != employee.id:
             raise HTTPException(
@@ -353,7 +358,8 @@ async def get_expense(
             )
     
     # Get employee details
-    employee = db.query(Employee).filter(Employee.id == expense.employee_id).first()
+    stmt = select(Employee).where(Employee.id == expense.employee_id)
+    employee = (await db.execute(stmt)).scalars().first()
     employee_data = None
     if employee:
         employee_data = {
@@ -367,7 +373,8 @@ async def get_expense(
     # Get approver details
     approver_data = None
     if expense.approved_by:
-        approver = db.query(User).filter(User.id == expense.approved_by).first()
+        stmt = select(User).where(User.id == expense.approved_by)
+        approver = (await db.execute(stmt)).scalars().first()
         if approver:
             approver_data = {
                 "id": str(approver.id),
@@ -412,10 +419,11 @@ async def update_expense(
     
     **Note**: Once approved or rejected, expenses cannot be updated by employees.
     """
-    expense = db.query(Expense).filter(
+    stmt = select(Expense).where(
         Expense.id == expense_id,
         Expense.company_id == company_id
-    ).first()
+    )
+    expense = (await db.execute(stmt)).scalars().first()
     
     if not expense:
         raise HTTPException(
@@ -425,10 +433,11 @@ async def update_expense(
     
     # Employees can only update their own pending expenses
     if current_user.role == UserRole.EMPLOYEE:
-        employee = db.query(Employee).filter(
+        stmt = select(Employee).where(
             Employee.user_id == current_user.id,
             Employee.company_id == company_id
-        ).first()
+        )
+        employee = (await db.execute(stmt)).scalars().first()
         
         if not employee or expense.employee_id != employee.id:
             raise HTTPException(
@@ -490,10 +499,11 @@ async def approve_expense(
     **Workflow**: Changes status from "pending" to "approved".
                  Sets approved_by and approved_at fields.
     """
-    expense = db.query(Expense).filter(
+    stmt = select(Expense).where(
         Expense.id == expense_id,
         Expense.company_id == company_id
-    ).first()
+    )
+    expense = (await db.execute(stmt)).scalars().first()
     
     if not expense:
         raise HTTPException(
@@ -557,10 +567,11 @@ async def reject_expense(
     **Workflow**: Changes status from "pending" to "rejected".
                  Sets approved_by, approved_at, and rejection_reason fields.
     """
-    expense = db.query(Expense).filter(
+    stmt = select(Expense).where(
         Expense.id == expense_id,
         Expense.company_id == company_id
-    ).first()
+    )
+    expense = (await db.execute(stmt)).scalars().first()
     
     if not expense:
         raise HTTPException(
@@ -623,10 +634,11 @@ async def reimburse_expense(
     **Workflow**: Changes status from "approved" to "reimbursed".
                  This indicates the expense has been paid/reimbursed to the employee.
     """
-    expense = db.query(Expense).filter(
+    stmt = select(Expense).where(
         Expense.id == expense_id,
         Expense.company_id == company_id
-    ).first()
+    )
+    expense = (await db.execute(stmt)).scalars().first()
     
     if not expense:
         raise HTTPException(
@@ -686,10 +698,11 @@ async def delete_expense(
     
     **Note**: Approved or reimbursed expenses should not be deleted (consider marking as cancelled instead).
     """
-    expense = db.query(Expense).filter(
+    stmt = select(Expense).where(
         Expense.id == expense_id,
         Expense.company_id == company_id
-    ).first()
+    )
+    expense = (await db.execute(stmt)).scalars().first()
     
     if not expense:
         raise HTTPException(
@@ -699,10 +712,11 @@ async def delete_expense(
     
     # Employees can only delete their own pending expenses
     if current_user.role == UserRole.EMPLOYEE:
-        employee = db.query(Employee).filter(
+        stmt = select(Employee).where(
             Employee.user_id == current_user.id,
             Employee.company_id == company_id
-        ).first()
+        )
+        employee = (await db.execute(stmt)).scalars().first()
         
         if not employee or expense.employee_id != employee.id:
             raise HTTPException(

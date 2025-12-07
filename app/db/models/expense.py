@@ -1,19 +1,18 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 from decimal import Decimal
-from sqlalchemy import String, DateTime, ForeignKey, CheckConstraint, Numeric, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, DateTime, ForeignKey, CheckConstraint, Numeric, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
 import enum
-import uuid
+from uuid import UUID
 
-from app.core.database import Base
+from app.core.database import Base, UUIDMixin, TimestampMixin, CompanyMixin
 from app.core.types import EnumType
 
 if TYPE_CHECKING:
     from app.db.models.company import Company
     from app.db.models.employee import Employee
+    from app.db.models.user import User
 
 
 class ExpenseStatus(str, enum.Enum):
@@ -24,7 +23,7 @@ class ExpenseStatus(str, enum.Enum):
     REIMBURSED = "reimbursed"
 
 
-class Expense(Base):
+class Expense(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     """
     Expense Reimbursement model - tracks business expenses submitted by employees
     
@@ -43,21 +42,8 @@ class Expense(Base):
         CheckConstraint("amount >= 0", name="ck_expenses_amount_non_negative"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), 
-        primary_key=True, 
-        default=uuid.uuid4, 
-        index=True
-    )
-    company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), 
-        ForeignKey("companies.id", ondelete="CASCADE", name="fk_expenses_company"), 
-        nullable=False, 
-        index=True,
-        comment="Company (tenant) this expense belongs to"
-    )
-    employee_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), 
+    employee_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), 
         ForeignKey("employees.id", ondelete="CASCADE", name="fk_expenses_employee"), 
         nullable=False, 
         index=True,
@@ -66,7 +52,7 @@ class Expense(Base):
     title: Mapped[str] = mapped_column(
         String(200), 
         nullable=False, 
-        index=True,
+        index=True, 
         comment="Expense title/description"
     )
     amount: Mapped[Decimal] = mapped_column(
@@ -98,8 +84,8 @@ class Expense(Base):
         nullable=True,
         comment="URL/path to uploaded receipt file (optional)"
     )
-    approved_by: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), 
+    approved_by: Mapped[Optional[UUID]] = mapped_column(
+        Uuid(as_uuid=True), 
         ForeignKey("users.id", ondelete="SET NULL", name="fk_expenses_approved_by"), 
         nullable=True,
         comment="User (HR/Admin) who approved/rejected this expense"
@@ -113,17 +99,6 @@ class Expense(Base):
         Text,
         nullable=True,
         comment="Reason for rejection (if status is rejected)"
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        server_default=func.now(), 
-        nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        server_default=func.now(), 
-        onupdate=func.now(), 
-        nullable=False
     )
 
     # Relationships

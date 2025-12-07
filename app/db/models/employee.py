@@ -1,12 +1,10 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING, List
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
-import uuid
+from uuid import UUID
 
-from app.core.database import Base
+from app.core.database import Base, UUIDMixin, TimestampMixin, CompanyMixin
 
 if TYPE_CHECKING:
     from app.db.models.company import Company
@@ -15,7 +13,7 @@ if TYPE_CHECKING:
     from app.db.models.expense import Expense
 
 
-class Employee(Base):
+class Employee(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     """
     Employee model - linked to user account and company (tenant)
     
@@ -31,21 +29,8 @@ class Employee(Base):
         UniqueConstraint('user_id', name='uq_employees_user_id'),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), 
-        primary_key=True, 
-        default=uuid.uuid4, 
-        index=True
-    )
-    company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), 
-        ForeignKey("companies.id", ondelete="CASCADE", name="fk_employees_company"), 
-        nullable=False, 
-        index=True,
-        comment="Company (tenant) this employee belongs to"
-    )
-    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), 
+    user_id: Mapped[Optional[UUID]] = mapped_column(
+        Uuid(as_uuid=True), 
         ForeignKey("users.id", ondelete="SET NULL", name="fk_employees_user"), 
         nullable=True, 
         index=True,
@@ -70,17 +55,6 @@ class Employee(Base):
     )
     phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        server_default=func.now(), 
-        nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        server_default=func.now(), 
-        onupdate=func.now(), 
-        nullable=False
-    )
 
     # Relationships
     company: Mapped["Company"] = relationship("Company", back_populates="employees")

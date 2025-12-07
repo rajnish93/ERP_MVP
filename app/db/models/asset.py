@@ -1,13 +1,11 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, DateTime, ForeignKey, CheckConstraint, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, DateTime, ForeignKey, CheckConstraint, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
 import enum
 import uuid
 
-from app.core.database import Base
+from app.core.database import Base, UUIDMixin, TimestampMixin, CompanyMixin
 from app.core.types import EnumType
 
 if TYPE_CHECKING:
@@ -42,7 +40,7 @@ class AssetCondition(str, enum.Enum):
     POOR = "poor"
 
 
-class Asset(Base):
+class Asset(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     """
     Asset/Device model - tracks devices issued to employees
     
@@ -62,19 +60,6 @@ class Asset(Base):
         UniqueConstraint('company_id', 'serial_number', name='uq_assets_company_serial'),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), 
-        primary_key=True, 
-        default=uuid.uuid4, 
-        index=True
-    )
-    company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), 
-        ForeignKey("companies.id", ondelete="CASCADE", name="fk_assets_company"), 
-        nullable=False, 
-        index=True,
-        comment="Company (tenant) this asset belongs to"
-    )
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True, comment="Asset/item name (e.g., 'MacBook Pro 16')")
     asset_type: Mapped[AssetType] = mapped_column(
         EnumType(AssetType, length=50),
@@ -103,7 +88,7 @@ class Asset(Base):
         comment="Physical condition of the asset"
     )
     assigned_to: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), 
+        Uuid(as_uuid=True), 
         ForeignKey("employees.id", ondelete="SET NULL", name="fk_assets_employee"), 
         nullable=True, 
         index=True,
@@ -113,17 +98,6 @@ class Asset(Base):
         DateTime(timezone=True), 
         nullable=True,
         comment="Date when asset was issued/assigned to current employee"
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        server_default=func.now(), 
-        nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        server_default=func.now(), 
-        onupdate=func.now(), 
-        nullable=False
     )
 
     # Relationships

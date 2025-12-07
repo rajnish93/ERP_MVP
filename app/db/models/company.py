@@ -1,13 +1,9 @@
-from datetime import datetime
 from typing import TYPE_CHECKING, List
-from sqlalchemy import String, Boolean, DateTime, CheckConstraint, UniqueConstraint, PrimaryKeyConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, Boolean, CheckConstraint, UniqueConstraint, PrimaryKeyConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
 import enum
-import uuid
 
-from app.core.database import Base
+from app.core.database import Base, UUIDMixin, TimestampMixin
 from app.core.types import EnumType
 
 if TYPE_CHECKING:
@@ -24,7 +20,7 @@ class PlanType(str, enum.Enum):
     ENTERPRISE = "enterprise"
 
 
-class Company(Base):
+class Company(Base, UUIDMixin, TimestampMixin):
     """Company (Tenant) model for multi-tenant SaaS"""
     __tablename__ = "companies"
     __table_args__ = (
@@ -36,13 +32,6 @@ class Company(Base):
         UniqueConstraint('email', name='uq_companies_email'),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), 
-        primary_key=True, 
-        default=uuid.uuid4, 
-        index=True,
-        comment="Primary key - explicitly named as pk_companies_id"
-    )
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     plan_type: Mapped[PlanType] = mapped_column(
@@ -52,17 +41,6 @@ class Company(Base):
         server_default=PlanType.FREE.value
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        server_default=func.now(), 
-        nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        server_default=func.now(), 
-        onupdate=func.now(), 
-        nullable=False
-    )
 
     # Relationships
     users: Mapped[List["User"]] = relationship("User", back_populates="company", cascade="all, delete-orphan")

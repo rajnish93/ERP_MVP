@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 class Employee(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     """
-    Employee model - linked to user account and company (tenant)
+    Employee model - linked to user account and company
     
     **Important Notes:**
     - `user_id` is OPTIONAL - employees can exist without user accounts

@@ -1,10 +1,11 @@
 from typing import Optional
 from uuid import UUID
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.core.workspace import get_company_id_by_slug
 from app.core.security import decode_access_token
 from app.core.config import settings
 from app.core.database import get_db
@@ -56,7 +57,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     if user is None:
         raise credentials_exception
     
-    # Verify company_id matches (security check for tenant isolation)
+    # Verify company_id matches (security check for company isolation)
     # Convert string UUID from token to UUID object for comparison
     if company_id_str is not None:
         try:
@@ -121,12 +122,17 @@ def require_employee_dependency():
     return require_role(UserRole.EMPLOYEE, UserRole.HR, UserRole.ADMIN)
 
 
-# Tenant isolation dependency - ensures data is scoped to user's company
-async def get_current_company_id(current_user: User = Depends(get_current_active_user)) -> UUID:
+# Company isolation dependency - ensures data is scoped to user's company
+async def get_current_company_id(
+    current_user: User = Depends(get_current_active_user),
+    x_workspace: str | None = Header(None, alias="X-Workspace", description="Workspace slug (e.g. test, xyz)"),
+    db: AsyncSession = Depends(get_db),
+) -> UUID:
     """
-    Get the current user's company_id for tenant isolation.
+    Get the current user's company_id for company isolation.
     
-    Use this dependency to ensure all data queries filter by company_id.
+    This dependency enforces header-based multi-tenancy using workspace slugs.
+    It validates that the `X-Workspace` header matches the authenticated user's company.
     
     Usage:
         @router.get("/employees")
@@ -138,13 +144,40 @@ async def get_current_company_id(current_user: User = Depends(get_current_active
             stmt = select(Employee).where(Employee.company_id == company_id)
             employees = (await db.execute(stmt)).scalars().all()
             return employees
-    """
+    """    
+    # If no header provided, just use the user's company_id
+    # (This is simpler since we already authenticated the user with company context)
+    if not x_workspace:
+        return current_user.company_id
+    
+    # If header is provided, verify it matches user's company
+    company_id_str = await get_company_id_by_slug(db, x_workspace)
+    if not company_id_str:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Workspace '{x_workspace}' not found"
+        )
+    
+    try:
+        header_company_id = UUID(company_id_str)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Invalid workspace configuration"
+        )
+        
+    if header_company_id != current_user.company_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Workspace mismatch. X-Workspace does not match your assigned company."
+        )
+        
     return current_user.company_id
 
 
 # Helper to get users filtered by company
 async def get_company_users(company_id: UUID, db: AsyncSession):
-    """Get all users for a specific company (tenant isolation)"""
+    """Get all users for a specific company (company isolation)"""
     stmt = select(User).where(User.company_id == company_id)
     result = await db.execute(stmt)
     return result.scalars().all()

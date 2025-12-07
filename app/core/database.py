@@ -52,7 +52,7 @@ class CompanyMixin:
             Uuid(as_uuid=True),
             ForeignKey("companies.id", ondelete="CASCADE", name=f"fk_{cls.__tablename__}_company"),
             index=True,
-            comment="Company (tenant) this record belongs to"
+            comment="Company (workspace) this record belongs to"
         )
 
 # Base class for declarative models (SQLAlchemy 2.0 syntax)

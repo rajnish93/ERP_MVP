@@ -143,7 +143,7 @@ async def get_expense_summary(
     - Rejected expenses count and amount
     - Reimbursed expenses count and amount
     """
-    # Base conditions - tenant isolated
+    # Base conditions - company isolated
     conditions = [Expense.company_id == company_id]
     
     # Employees can only see their own expenses
@@ -236,7 +236,7 @@ async def get_expenses(
     - min_amount/max_amount: Filter by amount range
     - search: Search by title or description
     """
-    # Base conditions - tenant isolated
+    # Base conditions - company isolated
     conditions = [Expense.company_id == company_id]
     
     # Employees can only see their own expenses

@@ -18,7 +18,7 @@ class UserRole(str, enum.Enum):
 
 
 class User(Base, UUIDMixin, TimestampMixin, CompanyMixin):
-    """User model for multi-tenant SaaS - belongs to a company"""
+    """User model for multi-workspace SaaS - belongs to a company"""
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("company_id", "email", name="uq_users_company_email"),

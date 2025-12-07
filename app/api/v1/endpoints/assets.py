@@ -33,7 +33,7 @@ async def create_asset(
     
     **Access**: Admin and HR only
     
-    **Tenant Isolation**: Assets are automatically assigned to the current user's company.
+    **Company Isolation**: Assets are automatically assigned to the current user's company.
     
     **Request**:
     - name: Asset/item name
@@ -57,7 +57,7 @@ async def create_asset(
     
     # Create new asset
     new_asset = Asset(
-        company_id=company_id,  # Tenant isolation
+        company_id=company_id,  # Company isolation
         name=asset_data.name,
         asset_type=asset_data.asset_type,
         serial_number=asset_data.serial_number,
@@ -113,7 +113,7 @@ async def get_assets(
     - assigned: Filter by assignment status
     - search: Search by name or serial number
     """
-    # Base query - tenant isolated
+    # Base query - company isolated
     stmt = select(Asset).where(Asset.company_id == company_id)
     
     # Apply filters

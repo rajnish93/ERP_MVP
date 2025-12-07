@@ -22,7 +22,7 @@ async def create_user(
     
     **Access**: Admin only
     
-    **Tenant Isolation**: Users are automatically assigned to the current user's company.
+    **Company Isolation**: Users are automatically assigned to the current user's company.
     
     **Flow**: This endpoint is used to invite employees to the portal:
     - If employee_id is provided: Links the new user account to an existing employee record
@@ -90,7 +90,7 @@ async def create_user(
     
     # Create new user (automatically assigned to current user's company)
     new_user = User(
-        company_id=current_user.company_id,  # Tenant isolation - same company
+        company_id=current_user.company_id,  # Company isolation - same company
         email=user_data.email,
         hashed_password=hashed_password,
         full_name=user_data.full_name,
@@ -149,11 +149,11 @@ async def get_company_users_endpoint(
     current_user: CurrentUser,
 ):
     """
-    Get all users for the current company (tenant).
+    Get all users for the current company (workspace).
     
     **Access**: All authenticated users
     
-    **Tenant Isolation**: Users can only see users from their own company.
+    **Company Isolation**: Users can only see users from their own company.
     """
     stmt = select(User).where(User.company_id == company_id)
     company_users = (await db.execute(stmt)).scalars().all()
@@ -201,7 +201,7 @@ async def deactivate_user(
     
     **Access**: Admin only
     
-    **Tenant Isolation**: Can only deactivate users from the same company.
+    **Company Isolation**: Can only deactivate users from the same company.
     """
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(

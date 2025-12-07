@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.api.v1 import api_router
 from app.core.config import settings
+from app.core.middleware import WorkspaceMiddleware
 
 # Create main FastAPI app with all routes under /api/v1
 app = FastAPI(
@@ -80,6 +81,9 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+# Add Workspace Middleware
+app.add_middleware(WorkspaceMiddleware)
 
 # Include API router under /api/v1 prefix
 app.include_router(api_router, prefix=settings.API_V1_STR)

@@ -44,7 +44,7 @@ class Asset(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     """
     Asset/Device model - tracks devices issued to employees
     
-    Assets belong to a company (tenant) and can be assigned to employees.
+    Assets belong to a company and can be assigned to employees.
     Each asset has a status, condition, and assignment history.
     """
     __tablename__ = "assets"

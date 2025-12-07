@@ -13,9 +13,9 @@ router = APIRouter()
 @router.post("/signup", response_model=CompanySignupResponse, status_code=status.HTTP_201_CREATED)
 async def company_signup(company_data: CompanyCreate, db: SessionDep):
     """
-    Company signup endpoint - creates a new company (tenant) and initial Admin user.
+    Company signup endpoint - creates a new company (workspace) and initial Admin user.
     
-    This is the entry point for multi-tenant SaaS. When a company signs up:
+    This is the entry point for multi-workspace SaaS. When a company signs up:
     1. A new company record is created
     2. An Admin user is automatically created for that company (no employee record yet)
     

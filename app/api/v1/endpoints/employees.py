@@ -29,7 +29,7 @@ async def create_employee(
     
     **Access**: Admin and HR only
     
-    **Tenant Isolation**: Employees are automatically assigned to the current user's company.
+    **Company Isolation**: Employees are automatically assigned to the current user's company.
     
     **Request**:
     - user_id: (Optional) User account ID to link employee to. If provided, must exist and belong to same company.
@@ -86,7 +86,7 @@ async def create_employee(
     
     # Create new employee (user_id is optional)
     new_employee = Employee(
-        company_id=company_id,  # Tenant isolation
+        company_id=company_id,  # Company isolation
         user_id=employee_data.user_id,  # Can be None if employee doesn't have user account yet
         name=employee_data.name,
         department=employee_data.department,
@@ -138,7 +138,7 @@ async def get_employees(
     
     **Access**: All authenticated users (but HR/Admin see more details)
     
-    **Tenant Isolation**: Only returns employees from the current user's company.
+    **Company Isolation**: Only returns employees from the current user's company.
     
     **Query Parameters**:
     - department: Filter by department name
@@ -146,7 +146,7 @@ async def get_employees(
     - is_active: Filter by active status (true/false)
     - search: Search by employee name or employee_id
     """
-    # Base query - filter by company (tenant isolation)
+    # Base query - filter by company (company isolation)
     stmt = select(Employee).where(Employee.company_id == company_id)
     
     # Apply filters
@@ -202,7 +202,7 @@ async def get_employee(
     
     **Access**: All authenticated users
     
-    **Tenant Isolation**: Can only access employees from the same company.
+    **Company Isolation**: Can only access employees from the same company.
     """
     stmt = select(Employee).where(
         Employee.id == employee_id,
@@ -244,7 +244,7 @@ async def update_employee(
     
     **Access**: Admin and HR only
     
-    **Tenant Isolation**: Can only update employees from the same company.
+    **Company Isolation**: Can only update employees from the same company.
     
     **Request**: All fields are optional - only provided fields will be updated.
     """
@@ -355,7 +355,7 @@ async def delete_employee(
     
     **Access**: Admin only
     
-    **Tenant Isolation**: Can only delete employees from the same company.
+    **Company Isolation**: Can only delete employees from the same company.
     
     **Note**: This performs a soft delete (sets is_active=False) rather than
     removing the record completely.

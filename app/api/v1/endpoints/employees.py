@@ -98,7 +98,7 @@ async def create_employee(
         is_active=True,
     )
     async with handle_db_operation(db, "create employee"):
-        await db.add(new_employee)
+        db.add(new_employee)
         await db.commit()
         await db.refresh(new_employee)
     

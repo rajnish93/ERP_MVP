@@ -120,10 +120,10 @@ async def create_user(
             joining_date=joining_date,
             is_active=True,
         )
-        db.add(new_employee)
     
     # Commit transaction with automatic error handling
     async with handle_db_operation(db, "create user"):
+        db.add(new_employee)
         await db.commit()
         await db.refresh(new_user)
     

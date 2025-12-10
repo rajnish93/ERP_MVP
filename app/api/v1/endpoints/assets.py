@@ -70,7 +70,7 @@ async def create_asset(
         issue_date=None,
     )
     async with handle_db_operation(db, "create asset"):
-        await db.add(new_asset)
+        db.add(new_asset)
         await db.commit()
         await db.refresh(new_asset)
     
@@ -472,7 +472,7 @@ async def delete_asset(
         )
     
     async with handle_db_operation(db, "delete asset"):
-        db.delete(asset)
+        await db.delete(asset)
         await db.commit()
     
     return None

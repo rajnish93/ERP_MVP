@@ -42,6 +42,7 @@ class Company(Base, UUIDMixin, TimestampMixin):
         String(50), 
         unique=True, 
         index=True, 
+        server_default='temp-slug',
         comment="URL-friendly identifier (e.g. test-corp)"
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)

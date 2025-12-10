@@ -9,6 +9,7 @@ class CompanyBase(BaseModel):
     """Base company schema with common fields"""
     name: str = Field(..., min_length=1, max_length=200)
     email: EmailStr
+    slug: str = Field(..., min_length=1, max_length=50)
 
 
 class CompanyCreate(CompanyBase):

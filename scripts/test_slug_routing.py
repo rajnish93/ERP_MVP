@@ -13,7 +13,7 @@ from app.core.database import AsyncSessionLocal  # noqa: E402
 from app.db.models.company import Company  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = "http://localhost/api/v1"
 
 def make_request(url, data=None, headers=None):
     if data:
@@ -67,7 +67,7 @@ def test_header_routing(slug: str, email: str, password: str):
         return True
     else:
         print(f"❌ Failed: Expected 200, got {code}")
-        print(f"   Response: {body[:200]}")
+        print(f"   Response: {body[:200] if body is not None else 'None (connection error)'}")
         return False
 
 def test_swagger_fallback(slug: str, email: str, password: str):
@@ -81,7 +81,7 @@ def test_swagger_fallback(slug: str, email: str, password: str):
         return True
     else:
         print(f"❌ Failed: Expected 200, got {code}")
-        print(f"   Response: {body[:200]}")
+        print(f"   Response: {body[:200] if body is not None else 'None (connection error)'}")
         return False
 
 def test_invalid_workspace():
@@ -96,7 +96,7 @@ def test_invalid_workspace():
         return True
     else:
         print(f"❌ Failed: Expected 404, got {code}")
-        print(f"   Response: {body[:200]}")
+        print(f"   Response: {body[:200] if body is not None else 'None (connection error)'}")
         return False
 
 def test_missing_workspace():
@@ -110,7 +110,7 @@ def test_missing_workspace():
         return True
     else:
         print(f"❌ Failed: Expected 422, got {code}")
-        print(f"   Response: {body[:200]}")
+        print(f"   Response: {body[:200] if body is not None else 'None (connection error)'}")
         return False
 
 async def main():

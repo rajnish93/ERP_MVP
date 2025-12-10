@@ -56,6 +56,7 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
     # Create new company
     new_company = Company(
         name=company_data.name,
+        slug=company_data.slug,
         email=company_data.email,
         plan_type=company_data.plan_type,
         is_active=True,
@@ -73,8 +74,9 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
         role=UserRole.ADMIN,  # First user is always Admin
         is_active=True,
     )
-    db.add(admin_user)
+
     async with handle_db_operation(db, "create company"):
+        db.add(admin_user)  # Move this inside the error-handling context
         await db.commit()
         await db.refresh(new_company)
         await db.refresh(admin_user)

@@ -30,7 +30,7 @@ def upgrade() -> None:
                existing_comment='Company (tenant) this asset belongs to',
                existing_nullable=False)
     op.drop_index(op.f('ix_assets_id'), table_name='assets')
-    op.add_column('companies', sa.Column('slug', sa.String(length=50), nullable=False, comment='URL-friendly identifier (e.g. test-corp)'))
+    op.add_column('companies', sa.Column('slug', sa.String(length=50), server_default='temp-slug', nullable=False, comment='URL-friendly identifier (e.g. test-corp)'))
     op.alter_column('companies', 'id',
                existing_type=sa.UUID(),
                server_default=sa.text('gen_random_uuid()'),

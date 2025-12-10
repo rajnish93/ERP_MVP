@@ -2,6 +2,7 @@ import urllib.request
 import urllib.parse
 import sys
 import asyncio
+from typing import Optional
 from sqlalchemy import select
 from pathlib import Path
 
@@ -13,7 +14,7 @@ if parent_dir not in sys.path:
 from app.core.database import AsyncSessionLocal  # noqa: E402
 from app.db.models.company import Company  # noqa: E402
 
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = "http://localhost/api/v1"
 
 # Known admin credentials from create_test_data
 ADMIN_EMAIL = "admin2@millerhenderson.com"
@@ -38,7 +39,7 @@ def make_request(url, data=None, headers=None):
         print(f"❌ Connection error: {e}")
         return None, None
 
-async def get_workspace_slug_for_email(email: str) -> str:
+async def get_workspace_slug_for_email(email: str) -> Optional[str]:
     """Fetch the workspace slug for the given user email"""
     async with AsyncSessionLocal() as db:
         from app.db.models.user import User

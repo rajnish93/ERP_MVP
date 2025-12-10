@@ -96,7 +96,7 @@ async def create_expense(
         rejection_reason=None,
     )
     async with handle_db_operation(db, "create expense"):
-        await db.add(new_expense)
+        db.add(new_expense)
         await db.commit()
         await db.refresh(new_expense)
     
@@ -708,8 +708,8 @@ async def delete_expense(
                 detail=f"Cannot delete expense with status '{expense.status.value}'. Consider updating status instead."
             )
     
-    db.delete(expense)
     async with handle_db_operation(db, "delete expense"):
+        await db.delete(expense)
         await db.commit()
     
     return None

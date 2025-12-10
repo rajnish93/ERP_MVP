@@ -164,7 +164,7 @@ async def get_current_company_id(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Invalid workspace configuration"
-        )
+        ) from None
         
     if header_company_id != current_user.company_id:
         raise HTTPException(

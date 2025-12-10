@@ -19,9 +19,12 @@ async def list_workspace():
         print("="*80)
         
         for c in companies:
-            # Infer admin email pattern
-            domain = c.email.split("@")[1]
-            
+            # Infer admin email pattern - safely extract domain
+            if "@" in c.email:
+                domain = c.email.rsplit("@", 1)[1]  # Use rsplit for safety
+            else:
+                domain = "(invalid-email)"  # Safe fallback for malformed emails
+
             print(f"{c.name:<30} | {c.slug:<20} | admin@{domain}")
             
         print("="*80 + "\n")

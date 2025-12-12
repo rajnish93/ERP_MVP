@@ -19,6 +19,7 @@ dependencies = [
     "python-jose[cryptography]==3.3.0",
     "python-multipart==0.0.12",
     "greenlet>=3.2.4",
+    "aiofiles>=25.1.0",
 ]
 
 [dependency-groups]

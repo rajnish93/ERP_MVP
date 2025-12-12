@@ -1,10 +1,14 @@
 import os
-import shutil
 import uuid
+import logging
+import aiofiles
 from typing import Optional
 from pathlib import Path
 from fastapi import UploadFile, HTTPException, status
 from app.core.config import settings
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 # Allowed mime types for security
 ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "application/pdf"]
@@ -52,13 +56,14 @@ class FileService:
 
         # 3. Save to Disk
         try:
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            async with aiofiles.open(file_path, "wb") as buffer:
+                content = await file.read()
+                await buffer.write(content)
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Could not save file: {str(e)}"
-            )
+                detail=f"Could not save file: {e!r}"
+            ) from e
 
         # 4. Return Metadata
         file_url = f"/static/uploads/{unique_filename}"
@@ -88,7 +93,7 @@ class FileService:
                 return True
         except Exception as e:
             # We don't want to crash if delete fails, just log it
-            print(f"Error acting deleting file {file_path}: {e}")
+            logger.warning(f"Error deleting file {file_path}: {e}")
             return False
         return False
 

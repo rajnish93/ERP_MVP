@@ -18,8 +18,10 @@ def generate_company_slug(name: str) -> str:
     Converts to lowercase, replaces non-alphanumeric chars with hyphens,
     removes leading/trailing hyphens, and limits to 50 characters.
     """
-    slug_base = re.sub(r'[^a-z0-9]+', '-', name.lower())
-    return slug_base.strip('-')[:50]
+    slug_base = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+    if not slug_base:
+        return "workspace"
+    return slug_base[:50]
 
 
 @router.post("/signup", response_model=CompanySignupResponse, status_code=status.HTTP_201_CREATED)
@@ -80,8 +82,8 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
         existing_company = (await db.execute(stmt)).scalars().first()
         if not existing_company:
             break
+        slug = f"{original_slug[: max(0, 50 - (len(str(counter)) + 1))]}-{counter}"
         counter += 1
-        slug = f"{original_slug}-{counter}"
 
     # Create new company
     new_company = Company(

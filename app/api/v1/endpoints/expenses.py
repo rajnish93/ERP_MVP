@@ -70,22 +70,23 @@ async def create_expense(
     target_employee_id = employee_id if employee_id else employee.id
     
     # 1. Verify permissions / employee check
-    if employee_id and employee and employee_id != employee.id:
-        # Only HR/Admin can submit for others
-        if current_user.role == UserRole.EMPLOYEE:
+    if employee_id:
+        # If employee exists and employee_id differs, only HR/Admin can submit for others
+        if employee and employee_id != employee.id and current_user.role == UserRole.EMPLOYEE:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only submit expenses for yourself"
             )
-        # Verify target exists in company
-        stmt = select(Employee).where(
-            Employee.id == target_employee_id,
-            Employee.company_id == company_id,
-            Employee.is_active == True
-        )
-        target = (await db.execute(stmt)).scalars().first()
-        if not target:
-            raise HTTPException(status_code=403, detail="Target employee not found in company")
+        # Verify target exists in company (always validate when employee_id is explicitly provided)
+        if not employee or employee_id != employee.id:
+            stmt = select(Employee).where(
+                Employee.id == target_employee_id,
+                Employee.company_id == company_id,
+                Employee.is_active.is_(True)
+            )
+            target = (await db.execute(stmt)).scalars().first()
+            if not target:
+                raise HTTPException(status_code=404, detail="Target employee not found or inactive in company")
 
     # 2. Handle File Upload (Atomic)
     receipt_url = None
@@ -312,6 +313,8 @@ async def get_expenses(
                 id=expense.id,
                 company_id=expense.company_id,
                 employee_id=expense.employee_id,
+                employee_name=expense.employee.name,
+                employee_code=expense.employee.employee_id,
                 title=expense.title,
                 amount=expense.amount,
                 description=expense.description,
@@ -465,6 +468,14 @@ async def update_expense(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Cannot update expense with status '{expense.status.value}'. Only pending expenses can be updated."
+            )
+    else:
+        # HR/Admin cannot update REIMBURSED or APPROVED expenses (they are locked)
+        # Note: User specific request was for REIMBURSED, but APPROVED should also be locked for edits to preserve integrity before payment
+        if expense.status in [ExpenseStatus.REIMBURSED, ExpenseStatus.APPROVED]:
+             raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot update expense with status '{expense.status.value}'. Expenses are locked after approval."
             )
     
     # Files to cleanup if successful
@@ -755,11 +766,11 @@ async def delete_expense(
                 detail=f"Cannot delete expense with status '{expense.status.value}'. Only pending expenses can be deleted."
             )
     else:
-        # HR/Admin: Warn if deleting approved/reimbursed expense
+        # HR/Admin: Warn if deleting approved/reimbursed expense -> Now strictly Forbidden
         if expense.status in [ExpenseStatus.APPROVED, ExpenseStatus.REIMBURSED]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot delete expense with status '{expense.status.value}'. Consider updating status instead."
+                detail=f"Cannot delete expense with status '{expense.status.value}'. Expenses are locked after approval."
             )
     
     # Store receipt URL to cleanup after successful deletion

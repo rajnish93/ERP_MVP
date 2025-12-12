@@ -45,6 +45,8 @@ class ExpenseResponse(ExpenseBase):
     id: UUID
     company_id: UUID
     employee_id: UUID
+    employee_name: Optional[str] = Field(None, description="Employee name")
+    employee_code: Optional[str] = Field(None, description="Employee ID code (e.g. EMP-001)")
     status: ExpenseStatus
     approved_by: Optional[UUID] = Field(None, description="User ID who approved/rejected")
     approved_at: Optional[datetime] = Field(None, description="Date when expense was approved/rejected")

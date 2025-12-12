@@ -118,7 +118,7 @@ app/
 1. **Submit**: Employee submits expense with status `pending`
 2. **Review**: HR/Admin reviews expense
 3. **Approve/Reject**: HR/Admin approves or rejects with reason
-4. **Reimburse**: (Future) Mark as reimbursed after payment
+4. **Reimburse**: Mark as reimbursed after payment
 
 #### Status Flow
 ```

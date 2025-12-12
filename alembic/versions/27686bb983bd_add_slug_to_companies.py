@@ -67,6 +67,7 @@ def upgrade() -> None:
                existing_comment='Company (tenant) this expense belongs to',
                existing_nullable=False)
     op.drop_index(op.f('ix_expenses_id'), table_name='expenses')
+    op.create_index(op.f('ix_expenses_approved_by'), 'expenses', ['approved_by'], unique=False)
     op.alter_column('users', 'role',
                existing_type=sa.VARCHAR(length=100),
                type_=sa.String(length=50),
@@ -109,6 +110,7 @@ def downgrade() -> None:
                existing_comment='User role (admin, hr, employee) - indexed for fast role-based access control queries',
                existing_nullable=False,
                existing_server_default=sa.text("'employee'::character varying"))
+    op.drop_index(op.f('ix_expenses_approved_by'), table_name='expenses')
     op.create_index(op.f('ix_expenses_id'), 'expenses', ['id'], unique=False)
     op.alter_column('expenses', 'company_id',
                existing_type=sa.UUID(),

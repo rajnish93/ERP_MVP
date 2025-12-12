@@ -39,7 +39,7 @@ class Expense(Base, UUIDMixin, TimestampMixin, CompanyMixin):
             "status IN ('pending', 'approved', 'rejected', 'reimbursed')",
             name="ck_expenses_status"
         ),
-        CheckConstraint("amount >= 0", name="ck_expenses_amount_non_negative"),
+        CheckConstraint("amount > 0", name="ck_expenses_amount_positive"),
     )
 
     employee_id: Mapped[UUID] = mapped_column(
@@ -85,9 +85,10 @@ class Expense(Base, UUIDMixin, TimestampMixin, CompanyMixin):
         comment="URL/path to uploaded receipt file (optional)"
     )
     approved_by: Mapped[Optional[UUID]] = mapped_column(
-        Uuid(as_uuid=True), 
-        ForeignKey("users.id", ondelete="SET NULL", name="fk_expenses_approved_by"), 
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL", name="fk_expenses_approved_by"),
         nullable=True,
+        index=True,
         comment="User (HR/Admin) who approved/rejected this expense"
     )
     approved_at: Mapped[Optional[datetime]] = mapped_column(

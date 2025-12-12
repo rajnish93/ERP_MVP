@@ -1,3 +1,4 @@
+import re
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
@@ -11,6 +12,16 @@ from app.schemas.company import CompanyCreate, CompanyResponse, CompanySignupRes
 router = APIRouter()
 
 
+def generate_company_slug(name: str) -> str:
+    """
+    Generate a URL-friendly slug from company name.
+    Converts to lowercase, replaces non-alphanumeric chars with hyphens,
+    removes leading/trailing hyphens, and limits to 50 characters.
+    """
+    slug_base = re.sub(r'[^a-z0-9]+', '-', name.lower())
+    return slug_base.strip('-')[:50]
+
+
 @router.post("/signup", response_model=CompanySignupResponse, status_code=status.HTTP_201_CREATED)
 async def company_signup(company_data: CompanyCreate, db: SessionDep):
     """
@@ -21,7 +32,7 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
     2. An Admin user is automatically created for that company (no employee record yet)
     
     **Request**:
-    - Company details: name, email, plan_type
+    - Company details: name, email, plan_type, slug (optional - auto-generated from name if not provided)
     - Admin user details: admin_name, admin_email, admin_password
     
     **Response**: Company details and Admin user details
@@ -44,19 +55,38 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
             detail="Company email already registered"
         )
     
-    # Check if admin email already exists
-    stmt = select(User).where(User.email == company_data.admin_email)
-    existing_user = (await db.execute(stmt)).scalars().first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Admin email already registered"
-        )
+    # Note: Email uniqueness is enforced per-company in the database
+    # (composite constraint on company_id + email)
+    # We don't check global uniqueness here to allow same email across companies
     
+    # Generate or validate slug for the company
+    if company_data.slug:
+        # Use provided slug but validate format and uniqueness
+        if not re.match(r'^[a-z0-9]+(?:-[a-z0-9]+)*$', company_data.slug):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Slug must contain only lowercase letters, numbers, and hyphens. Cannot start or end with a hyphen."
+            )
+        slug = company_data.slug
+    else:
+        # Auto-generate slug from company name
+        slug = generate_company_slug(company_data.name)
+
+    # Ensure slug uniqueness
+    original_slug = slug
+    counter = 1
+    while True:
+        stmt = select(Company).where(Company.slug == slug)
+        existing_company = (await db.execute(stmt)).scalars().first()
+        if not existing_company:
+            break
+        counter += 1
+        slug = f"{original_slug}-{counter}"
+
     # Create new company
     new_company = Company(
         name=company_data.name,
-        slug=company_data.slug,
+        slug=slug,
         email=company_data.email,
         plan_type=company_data.plan_type,
         is_active=True,
@@ -86,6 +116,7 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
             id=new_company.id,
             name=new_company.name,
             email=new_company.email,
+            slug=new_company.slug,
             plan_type=new_company.plan_type,
             is_active=new_company.is_active,
             created_at=new_company.created_at,

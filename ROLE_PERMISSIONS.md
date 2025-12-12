@@ -35,6 +35,7 @@ Admins have complete control over the system and can perform all operations.
 - ✅ **Submit expenses** - Can submit expenses for any employee (`POST /api/v1/expenses`)
 - ✅ **Approve expenses** - Approve pending expenses (`POST /api/v1/expenses/{expense_id}/approve`)
 - ✅ **Reject expenses** - Reject expenses with reason (`POST /api/v1/expenses/{expense_id}/reject`)
+- ✅ **Reimburse expenses** - Mark expenses as reimbursed (`POST /api/v1/expenses/{expense_id}/reimburse`)
 - ✅ **Update expenses** - Update any expense (`PATCH /api/v1/expenses/{expense_id}`)
 - ✅ **Delete expenses** - Delete any expense (`DELETE /api/v1/expenses/{expense_id}`)
 - ✅ **Filter expenses** - Use all filter options (status, employee, date range, amount, search)
@@ -81,6 +82,7 @@ HR has access to most operational features but cannot manage users.
 - ✅ **Submit expenses** - Can submit expenses for any employee (`POST /api/v1/expenses`)
 - ✅ **Approve expenses** - Approve pending expenses (`POST /api/v1/expenses/{expense_id}/approve`)
 - ✅ **Reject expenses** - Reject expenses with reason (`POST /api/v1/expenses/{expense_id}/reject`)
+- ✅ **Reimburse expenses** - Mark expenses as reimbursed (`POST /api/v1/expenses/{expense_id}/reimburse`)
 - ✅ **Update expenses** - Update any expense (`PATCH /api/v1/expenses/{expense_id}`)
 - ✅ **Delete expenses** - Delete any expense (`DELETE /api/v1/expenses/{expense_id}`)
 - ✅ **Filter expenses** - Use all filter options (status, employee, date range, amount, search)
@@ -170,6 +172,8 @@ Employees have restricted access and can only manage their own data.
 | Submit Expenses | ✅ (Any) | ✅ (Any) | ✅ (Own only) |
 | Approve Expenses | ✅ | ✅ | ❌ |
 | Reject Expenses | ✅ | ✅ | ❌ |
+| Reimburse Expenses | ✅ | ✅ | ❌ |
+
 | Update Expenses | ✅ (Any) | ✅ (Any) | ✅ (Own pending only) |
 | Delete Expenses | ✅ (Any) | ✅ (Any) | ✅ (Own pending only) |
 | **Asset Management** |
@@ -341,6 +345,8 @@ POST /api/v1/expenses
 - `POST /api/v1/assets/{asset_id}/unassign` - Unassign asset
 - `POST /api/v1/expenses/{expense_id}/approve` - Approve expense
 - `POST /api/v1/expenses/{expense_id}/reject` - Reject expense
+- `POST /api/v1/expenses/{expense_id}/reimburse` - Reimburse expense
+
 
 ### Employee Restricted Endpoints
 - `GET /api/v1/expenses` - Only returns own expenses

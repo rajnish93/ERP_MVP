@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Request, status
+from fastapi.staticfiles import StaticFiles
+
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -87,6 +89,13 @@ app.add_middleware(WorkspaceMiddleware)
 
 # Include API router under /api/v1 prefix
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Mount uploads directory to serve static files (e.g., http://localhost:8000/static/uploads/...)
+# Ensure directory exists
+import os
+os.makedirs("uploads", exist_ok=True)
+app.mount("/static/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 
 
 # Health check endpoint (keep at root for Docker health checks)

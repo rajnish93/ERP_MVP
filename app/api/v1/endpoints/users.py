@@ -30,7 +30,7 @@ async def create_user(
     - If employee_id is not provided: Creates a new employee record for the user
     
     **Request**:
-    - email: User email (must be unique globally)
+    - email: User email (must be unique within the company)
     - password: User password (min 8 characters)
     - full_name: User full name
     - role: User role (hr, employee) - Admin role cannot be assigned via this endpoint
@@ -55,13 +55,16 @@ async def create_user(
             detail="Admin role can only be assigned during company signup"
         )
     
-    # Check if user with email already exists globally
-    stmt = select(User).where(User.email == user_data.email)
+    # Check if user with email already exists in the current company
+    stmt = select(User).where(
+        User.email == user_data.email,
+        User.company_id == current_user.company_id
+    )
     existing_user = (await db.execute(stmt)).scalars().first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="Email already registered in your company"
         )
     
     # Hash password
@@ -123,7 +126,8 @@ async def create_user(
     
     # Commit transaction with automatic error handling
     async with handle_db_operation(db, "create user"):
-        db.add(new_employee)
+        if not user_data.employee_id:
+            db.add(new_employee)
         await db.commit()
         await db.refresh(new_user)
     

@@ -9,7 +9,7 @@ class CompanyBase(BaseModel):
     """Base company schema with common fields"""
     name: str = Field(..., min_length=1, max_length=200)
     email: EmailStr
-    slug: str = Field(..., min_length=1, max_length=50)
+    slug: str | None = Field(None, min_length=1, max_length=50, description="Optional custom slug. If not provided, will be auto-generated from company name.")
 
 
 class CompanyCreate(CompanyBase):

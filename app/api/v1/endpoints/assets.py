@@ -150,6 +150,10 @@ async def get_assets(
             # Employee without employee record sees nothing
             return AssetListResponse(assets=[], total=0)
     
+    # Eager load employee relationship for name display
+    from sqlalchemy.orm import selectinload
+    stmt = stmt.options(selectinload(Asset.employee))
+    
     assets = (await db.execute(stmt.order_by(Asset.created_at.desc()))).scalars().all()
     
     return AssetListResponse(
@@ -164,6 +168,8 @@ async def get_assets(
                 condition=asset.condition,
                 assigned_to=asset.assigned_to,
                 issue_date=asset.issue_date,
+                employee_name=asset.employee.name,
+                employee_code=asset.employee.employee_id,
                 created_at=asset.created_at,
                 updated_at=asset.updated_at,
             )

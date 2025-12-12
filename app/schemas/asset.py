@@ -40,6 +40,8 @@ class AssetResponse(AssetBase):
     status: AssetStatus
     assigned_to: Optional[UUID] = Field(None, description="Employee ID currently assigned this asset")
     issue_date: Optional[datetime] = Field(None, description="Date when asset was issued/assigned to current employee")
+    employee_name: Optional[str] = Field(None, description="Name of the assigned employee")
+    employee_code: Optional[str] = Field(None, description="Employee code of the assigned employee")
     created_at: datetime
     updated_at: datetime
     

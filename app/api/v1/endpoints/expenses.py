@@ -667,7 +667,7 @@ async def reimburse_expense(
     expense_id: UUID,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Mark an expense as reimbursed.

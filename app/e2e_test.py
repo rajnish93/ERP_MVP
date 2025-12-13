@@ -1,16 +1,18 @@
 import asyncio
 import httpx
 import uuid
+import os
 from datetime import datetime
 
 # --- Configuration ---
 BASE_URL = "http://localhost:8000/api/v1"
-COMPANY_NAME = f"Test Corp {uuid.uuid4().hex[:6]}"
-ADMIN_EMAIL = f"admin_{uuid.uuid4().hex[:6]}@example.com"
-ADMIN_PASSWORD = "secretpassword"
+# Use random defaults but allow override via env for consistent runs if needed
+COMPANY_NAME = os.environ.get("COMPANY_NAME", f"Test Corp {uuid.uuid4().hex[:6]}")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", f"admin_{uuid.uuid4().hex[:6]}@example.com")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "secretpassword")
 EMPLOYEE_NAME = "John Doe"
-EMPLOYEE_EMAIL = f"john_{uuid.uuid4().hex[:6]}@example.com"
-EMPLOYEE_PASSWORD = "employeepassword"
+EMPLOYEE_EMAIL = os.environ.get("EMPLOYEE_EMAIL", f"john_{uuid.uuid4().hex[:6]}@example.com")
+EMPLOYEE_PASSWORD = os.environ.get("EMPLOYEE_PASSWORD", "employeepassword")
 
 async def main():
     print(f"🚀 Starting E2E Test for {COMPANY_NAME}...")
@@ -150,7 +152,7 @@ async def main():
              return
         
         # 10. Approve Expense (as Admin)
-        print("\n[9/20] Approving Expense as Admin...")
+        print("[10/20] Approving Expense as Admin...")
         res = await client.post(f"{BASE_URL}/expenses/{expense_id}/approve", headers=admin_headers)
         if res.status_code != 200:
             print(f"❌ Approve Expense Failed: {res.text}")
@@ -165,7 +167,7 @@ async def main():
         print("\n[11/20] Unassigning Asset...")
         res = await client.post(f"{BASE_URL}/assets/{asset_id}/unassign", headers=admin_headers)
         if res.status_code != 200:
-            print(f"❌ Unassign Asset Failed: {res.code} {res.text}")
+            print(f"❌ Unassign Asset Failed: {res.status_code} {res.text}")
             return
         unassigned_asset = res.json()
         if unassigned_asset["status"] != "available" or unassigned_asset["assigned_to"] is not None:
@@ -295,10 +297,19 @@ async def main():
             "plan_type": "free"
         }
         res = await client.post(f"{BASE_URL}/companies/signup", json=company2_data)
+        if res.status_code != 201:
+             print(f"❌ Company 2 Signup Failed: {res.text}")
+             return
+        
         company2_slug = res.json()["company"]["slug"]
         
         # Login
-        res = await client.post(f"{BASE_URL}/auth/token", data={"username": f"{company2_data['admin_email']}|{company2_slug}", "password": "password"})
+        evil_login_data = {"username": f"{company2_data['admin_email']}|{company2_slug}", "password": "password"}
+        res = await client.post(f"{BASE_URL}/auth/token", data=evil_login_data)
+        if res.status_code != 200:
+             print(f"❌ Company 2 Login Failed: {res.text}")
+             return
+
         evil_token = res.json()["access_token"]
         evil_headers = {"Authorization": f"Bearer {evil_token}"}
         

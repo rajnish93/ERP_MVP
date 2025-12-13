@@ -77,12 +77,12 @@ class FileService:
             "size": size
         }
 
-    async def delete_file(self, file_url: str):
+    async def delete_file(self, file_url: str) -> bool:
         """
         Delete a file from disk given its URL.
         """
         if not file_url:
-            return
+            return False
 
         # Extract filename from URL (assuming /static/uploads/filename)
         filename = os.path.basename(file_url)

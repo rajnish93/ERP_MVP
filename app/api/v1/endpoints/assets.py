@@ -29,7 +29,7 @@ async def create_asset(
     asset_data: AssetCreate,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),  # noqa: B008
 ):
     """
     Create a new asset/device for the current company.

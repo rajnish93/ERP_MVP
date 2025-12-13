@@ -1,8 +1,9 @@
-from typing import Optional
+from typing import Optional, Annotated
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Form, File, UploadFile
+
 from sqlalchemy import or_, func as sql_func, select
 from sqlalchemy.orm import selectinload
 
@@ -12,9 +13,8 @@ from app.db.models.expense import Expense, ExpenseStatus
 from app.db.models.employee import Employee
 from app.db.models.user import User, UserRole
 from app.core.dependencies import require_role
+from app.core.files import file_service
 from app.schemas.expense import (
-    ExpenseCreate,
-    ExpenseUpdate,
     ExpenseRejection,
     ExpenseResponse,
     ExpenseDetailResponse,
@@ -25,22 +25,19 @@ from app.schemas.expense import (
 router = APIRouter()
 
 
-from fastapi import Form, File, UploadFile
-from app.core.files import file_service
-
 @router.post("/", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
 async def create_expense(
     db: SessionDep,
     company_id: CurrentCompanyId,
     current_user: CurrentUser,
     # Form fields
-    title: str = Form(..., min_length=1, max_length=200),
-    amount: Decimal = Form(..., gt=0),
-    expense_date: datetime = Form(...),
-    description: Optional[str] = Form(None),
-    employee_id: Optional[UUID] = Form(None),
+    title: Annotated[str, Form(min_length=1, max_length=200)],
+    amount: Annotated[Decimal, Form(gt=0)],
+    expense_date: Annotated[datetime, Form()],
+    description: Annotated[Optional[str], Form()] = None,
+    employee_id: Annotated[Optional[UUID], Form()] = None,
     # File upload
-    file: Optional[UploadFile] = File(None),
+    file: Annotated[Optional[UploadFile], File()] = None,
 ):
     """
     Submit a new expense with optional receipt file.
@@ -111,11 +108,11 @@ async def create_expense(
             db.add(new_expense)
             await db.commit()
             await db.refresh(new_expense)
-    except Exception as e:
+    except Exception:
         # If DB fails, cleanup the uploaded file!
         if receipt_url:
             await file_service.delete_file(receipt_url)
-        raise e
+        raise
 
     return ExpenseResponse(
         id=new_expense.id,
@@ -427,13 +424,13 @@ async def update_expense(
     company_id: CurrentCompanyId,
     current_user: CurrentUser,
     # Form fields (all optional for patch)
-    title: Optional[str] = Form(None, min_length=1, max_length=200),
-    amount: Optional[Decimal] = Form(None, gt=0),
-    expense_date: Optional[datetime] = Form(None),
-    description: Optional[str] = Form(None),
+    title: Annotated[Optional[str], Form(min_length=1, max_length=200)] = None,
+    amount: Annotated[Optional[Decimal], Form(gt=0)] = None,
+    expense_date: Annotated[Optional[datetime], Form()] = None,
+    description: Annotated[Optional[str], Form()] = None,
     # File handling
-    file: Optional[UploadFile] = File(None),
-    clear_receipt: bool = Form(False), # Flag to explicitly remove receipt
+    file: Annotated[Optional[UploadFile], File()] = None,
+    clear_receipt: Annotated[bool, Form()] = False, # Flag to explicitly remove receipt
 ):
     """
     Update an expense. Supports partial updates and file replacement.
@@ -481,6 +478,9 @@ async def update_expense(
     # Files to cleanup if successful
     files_to_delete = []
     
+    # Store new receipt URL separately
+    new_receipt_url = None
+
     # Handle File Replacement / Removal
     if clear_receipt and expense.receipt_url:
         files_to_delete.append(expense.receipt_url)
@@ -493,13 +493,18 @@ async def update_expense(
             
         # Upload new file
         upload_result = await file_service.save_file(file)
-        expense.receipt_url = upload_result["url"]
+        new_receipt_url = upload_result["url"]
+        expense.receipt_url = new_receipt_url
 
     # Update other fields if provided
-    if title is not None: expense.title = title
-    if amount is not None: expense.amount = amount
-    if expense_date is not None: expense.expense_date = expense_date
-    if description is not None: expense.description = description
+    if title is not None:
+        expense.title = title
+    if amount is not None:
+        expense.amount = amount
+    if expense_date is not None:
+        expense.expense_date = expense_date
+    if description is not None:
+        expense.description = description
     
     try:
         async with handle_db_operation(db, "update expense"):
@@ -510,15 +515,11 @@ async def update_expense(
         for old_url in files_to_delete:
             await file_service.delete_file(old_url)
             
-    except Exception as e:
+    except Exception:
         # If DB update fails, but we uploaded a NEW file, we must delete the NEW file
-        # (The old file is safe because we haven't deleted it yet)
-        # Note: If we had a complex rollback scenario, this might need more logic,
-        # but for now, we just need to ensure we don't leak the NEW file if DB commit fails.
-        # However, `expense.receipt_url` is already updated in the session object...
-        # Ideally we track the *newly uploaded* url separately.
-        # For MVP, this is acceptable risk (worst case = orphaned new file on 500)
-        raise e
+        if new_receipt_url:
+            await file_service.delete_file(new_receipt_url)
+        raise
     
     return ExpenseResponse(
         id=expense.id,
@@ -543,7 +544,7 @@ async def approve_expense(
     expense_id: UUID,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Approve an expense for reimbursement.
@@ -605,7 +606,7 @@ async def reject_expense(
     rejection_data: ExpenseRejection,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Reject an expense.
@@ -666,7 +667,7 @@ async def reimburse_expense(
     expense_id: UUID,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Mark an expense as reimbursed.

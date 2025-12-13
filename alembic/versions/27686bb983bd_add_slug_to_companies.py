@@ -30,7 +30,15 @@ def upgrade() -> None:
                existing_comment='Company (tenant) this asset belongs to',
                existing_nullable=False)
     op.drop_index(op.f('ix_assets_id'), table_name='assets')
-    op.add_column('companies', sa.Column('slug', sa.String(length=50), server_default='temp-slug', nullable=False, comment='URL-friendly identifier (e.g. test-corp)'))
+    # Step 1: Add as nullable
+    op.add_column('companies', sa.Column('slug', sa.String(length=50), nullable=True, comment='URL-friendly identifier (e.g. test-corp)'))
+    
+    # Step 2: Backfill with unique slugs (name + id) to avoid collisions
+    # This works for PostgreSQL/SQLite
+    op.execute("UPDATE companies SET slug = LOWER(REPLACE(name, ' ', '-')) || '-' || CAST(id AS VARCHAR)")
+    
+    # Step 3: Make it NOT NULL
+    op.alter_column('companies', 'slug', nullable=False, existing_type=sa.String(length=50))
     op.alter_column('companies', 'id',
                existing_type=sa.UUID(),
                server_default=sa.text('gen_random_uuid()'),

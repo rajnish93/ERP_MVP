@@ -1,9 +1,9 @@
 import re
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.deps import SessionDep
-from app.core.error_handlers import handle_db_operation
 from app.db.models.company import Company
 from app.db.models.user import User, UserRole
 from app.core.security import get_password_hash
@@ -63,7 +63,12 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
     
     # Generate or validate slug for the company
     if company_data.slug:
-        # Use provided slug but validate format and uniqueness
+        # Validate format and length
+        if len(company_data.slug) > 50:
+             raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Slug must be 50 characters or less."
+            )
         if not re.match(r'^[a-z0-9]+(?:-[a-z0-9]+)*$', company_data.slug):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -74,7 +79,7 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
         # Auto-generate slug from company name
         slug = generate_company_slug(company_data.name)
 
-    # Ensure slug uniqueness
+    # Ensure slug uniqueness (Loop check helps reduce collisions but doesn't prevent race conditions completely)
     original_slug = slug
     counter = 1
     while True:
@@ -106,12 +111,25 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
         role=UserRole.ADMIN,  # First user is always Admin
         is_active=True,
     )
+    db.add(admin_user)
 
-    async with handle_db_operation(db, "create company"):
-        db.add(admin_user)  # Move this inside the error-handling context
+    try:
         await db.commit()
         await db.refresh(new_company)
         await db.refresh(admin_user)
+    except IntegrityError:
+        await db.rollback()
+        # Handle concurrency collision for slug or email
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Company with this slug or email already exists. Please try again."
+        )
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create company: {str(e)}"
+        )
     
     return CompanySignupResponse(
         company=CompanyResponse(

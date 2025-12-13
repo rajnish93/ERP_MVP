@@ -478,7 +478,7 @@ async def delete_asset(
         )
     
     async with handle_db_operation(db, "delete asset"):
-        db.delete(asset)
+        await db.delete(asset)
         await db.commit()
     
     return None

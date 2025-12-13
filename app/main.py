@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Request, status
 from fastapi.staticfiles import StaticFiles
 
@@ -92,7 +93,6 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # Mount uploads directory to serve static files (e.g., http://localhost:8000/static/uploads/...)
 # Ensure directory exists
-import os
 os.makedirs("uploads", exist_ok=True)
 app.mount("/static/uploads", StaticFiles(directory="uploads"), name="uploads")
 

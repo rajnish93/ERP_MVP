@@ -2,10 +2,8 @@ import os
 import uuid
 import logging
 import aiofiles
-from typing import Optional
 from pathlib import Path
 from fastapi import UploadFile, HTTPException, status
-from app.core.config import settings
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -47,9 +45,12 @@ class FileService:
         # 2. Generate Safe Filename
         ext = Path(file.filename).suffix.lower() if file.filename else ""
         if not ext:
-             if file.content_type == "application/pdf": ext = ".pdf"
-             elif file.content_type == "image/jpeg": ext = ".jpg"
-             elif file.content_type == "image/png": ext = ".png"
+            if file.content_type == "application/pdf":
+                ext = ".pdf"
+            elif file.content_type == "image/jpeg":
+                ext = ".jpg"
+            elif file.content_type == "image/png":
+                ext = ".png"
 
         unique_filename = f"{uuid.uuid4()}{ext}"
         file_path = self.upload_dir / unique_filename

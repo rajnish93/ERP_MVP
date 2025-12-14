@@ -65,7 +65,7 @@ async def forgot_password(request: PasswordResetRequest, db: SessionDep):
         }
     
     # Generate reset token
-    reset_token = create_password_reset_token(user.email, user.company_id)
+    reset_token = await create_password_reset_token(db, user.email, user.company_id)
     
     # In production: Send email with reset link
     # For MVP: Return token in response (remove in production!)
@@ -88,7 +88,7 @@ async def reset_password(reset_data: PasswordReset, db: SessionDep):
     **Response**: Success message
     """
     # Verify reset token
-    token_data = verify_password_reset_token(reset_data.token)
+    token_data = await verify_password_reset_token(db, reset_data.token)
     if not token_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -113,7 +113,7 @@ async def reset_password(reset_data: PasswordReset, db: SessionDep):
         await db.commit()
     
     # Invalidate reset token (one-time use)
-    invalidate_password_reset_token(reset_data.token)
+    await invalidate_password_reset_token(db, reset_data.token)
     
     return PasswordResetResponse(message="Password reset successfully")
 

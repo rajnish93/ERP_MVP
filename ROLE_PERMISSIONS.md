@@ -158,18 +158,17 @@ Employees have restricted access and can only manage their own data.
 
 | Feature | Admin | HR | Employee |
 |---------|:----:|:--:|:--------:|
-| Feature | Admin | HR | Employee |
-|---------|:----:|:--:|:--------:|
-| <td colspan=4 align="center"><b>User Management</b></td> |
+
+| **User Management** | | | |
 | Create Users | ✅ | ❌ | ❌ |
 | View All Users | ✅ | ✅ | ✅ |
 | Deactivate Users | ✅ | ❌ | ❌ |
-| <td colspan=4 align="center"><b>Employee Management</b></td> |
+| **Employee Management** | | | |
 | Create Employees | ✅ | ✅ | ❌ |
 | View All Employees | ✅ | ✅ | ✅ |
 | Update Employees | ✅ | ✅ | ❌ |
 | Delete Employees | ✅ | ❌ | ❌ |
-| <td colspan=4 align="center"><b>Expense Management</b></td> |
+| **Expense Management** | | | |
 | View All Expenses | ✅ | ✅ | ❌ (Own only) |
 | Submit Expenses | ✅ (Any) | ✅ (Any) | ✅ (Own only) |
 | Approve Expenses | ✅ | ✅ | ❌ |
@@ -178,8 +177,7 @@ Employees have restricted access and can only manage their own data.
 
 | Update Expenses | ✅ (Any) | ✅ (Any) | ✅ (Own pending only) |
 | Delete Expenses | ✅ (Any) | ✅ (Any) | ✅ (Own pending only) |
-| Delete Expenses | ✅ (Any) | ✅ (Any) | ✅ (Own pending only) |
-| <td colspan=4 align="center"><b>Asset Management</b></td> |
+| **Asset Management** | | | |
 | Create Assets | ✅ | ✅ | ❌ |
 | View All Assets | ✅ | ✅ | ❌ (Assigned only) |
 | Update Assets | ✅ | ✅ | ❌ |

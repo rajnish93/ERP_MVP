@@ -1,3 +1,4 @@
+from typing import Annotated
 from datetime import timedelta
 from uuid import UUID
 from fastapi import APIRouter, HTTPException, status, Header, Request
@@ -17,9 +18,10 @@ router = APIRouter()
 async def login_for_access_token(
     form_data: OAuth2Form,
     db: SessionDep,
-    x_workspace: str | None = Header(
-        None, alias="X-Workspace", description="Workspace slug (e.g. test, xyz)"
-    ),
+    x_workspace: Annotated[
+        str | None,
+        Header(alias="X-Workspace", description="Workspace slug (e.g. test, xyz)"),
+    ] = None,
     request: Request = None,
 ):
     """

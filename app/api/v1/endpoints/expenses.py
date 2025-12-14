@@ -247,21 +247,32 @@ async def get_expenses(
     db: SessionDep,
     company_id: CurrentCompanyId,
     current_user: CurrentUser,
-    status_filter: Optional[ExpenseStatus] = Query(
-        None, alias="status", description="Filter by expense status"
-    ),
-    employee_id: Optional[UUID] = Query(None, description="Filter by employee ID"),
-    start_date: Optional[datetime] = Query(
-        None, description="Filter by expense date (start)"
-    ),
-    end_date: Optional[datetime] = Query(
-        None, description="Filter by expense date (end)"
-    ),
-    min_amount: Optional[Decimal] = Query(None, description="Minimum amount filter"),
-    max_amount: Optional[Decimal] = Query(None, description="Maximum amount filter"),
-    search: Optional[str] = Query(None, description="Search by title or description"),
-    skip: int = Query(0, ge=0, description="Skip N items"),
-    limit: int = Query(100, ge=1, le=1000, description="Limit items per page"),
+    status_filter: Annotated[
+        Optional[ExpenseStatus],
+        Query(alias="status", description="Filter by expense status"),
+    ] = None,
+    employee_id: Annotated[
+        Optional[UUID], Query(description="Filter by employee ID")
+    ] = None,
+    start_date: Annotated[
+        Optional[datetime], Query(description="Filter by expense date (start)")
+    ] = None,
+    end_date: Annotated[
+        Optional[datetime], Query(description="Filter by expense date (end)")
+    ] = None,
+    min_amount: Annotated[
+        Optional[Decimal], Query(description="Minimum amount filter")
+    ] = None,
+    max_amount: Annotated[
+        Optional[Decimal], Query(description="Maximum amount filter")
+    ] = None,
+    search: Annotated[
+        Optional[str], Query(description="Search by title or description")
+    ] = None,
+    skip: Annotated[int, Query(ge=0, description="Skip N items")] = 0,
+    limit: Annotated[
+        int, Query(ge=1, le=1000, description="Limit items per page")
+    ] = 100,
 ):
     """
     List expenses.

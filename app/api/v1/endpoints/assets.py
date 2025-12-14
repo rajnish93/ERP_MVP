@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, Annotated
 from datetime import datetime, timezone
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -29,7 +29,7 @@ async def create_asset(
     asset_data: AssetCreate,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Create a new asset/device for the current company.
@@ -93,17 +93,26 @@ async def get_assets(
     db: SessionDep,
     company_id: CurrentCompanyId,
     current_user: CurrentUser,
-    status_filter: Optional[AssetStatus] = Query(
-        None, alias="status", description="Filter by asset status"
-    ),
-    asset_type: Optional[str] = Query(None, description="Filter by asset type"),
-    assigned: Optional[bool] = Query(
-        None,
-        description="Filter by assignment status (true=assigned, false=unassigned)",
-    ),
-    search: Optional[str] = Query(None, description="Search by name or serial number"),
-    skip: int = Query(0, ge=0, description="Skip N items"),
-    limit: int = Query(100, ge=1, le=1000, description="Limit items per page"),
+    status_filter: Annotated[
+        Optional[AssetStatus],
+        Query(alias="status", description="Filter by asset status"),
+    ] = None,
+    asset_type: Annotated[
+        Optional[str], Query(description="Filter by asset type")
+    ] = None,
+    assigned: Annotated[
+        Optional[bool],
+        Query(
+            description="Filter by assignment status (true=assigned, false=unassigned)"
+        ),
+    ] = None,
+    search: Annotated[
+        Optional[str], Query(description="Search by name or serial number")
+    ] = None,
+    skip: Annotated[int, Query(ge=0, description="Skip N items")] = 0,
+    limit: Annotated[
+        int, Query(ge=1, le=1000, description="Limit items per page")
+    ] = 100,
 ):
     """
     List all assets for the current company.
@@ -260,7 +269,7 @@ async def update_asset(
     asset_data: AssetUpdate,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Update asset details.
@@ -322,7 +331,7 @@ async def assign_asset(
     assign_data: AssetAssign,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Assign an asset to an employee.
@@ -403,7 +412,7 @@ async def unassign_asset(
     asset_id: UUID,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Unassign an asset from an employee.
@@ -459,7 +468,7 @@ async def delete_asset(
     asset_id: UUID,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    _current_user: User = Depends(require_role(UserRole.ADMIN)),
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN))],
 ):
     """
     Delete an asset.

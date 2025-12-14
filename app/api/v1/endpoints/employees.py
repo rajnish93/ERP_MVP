@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, Annotated
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import or_, select
@@ -25,7 +25,7 @@ async def create_employee(
     employee_data: EmployeeCreate,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Create a new employee for the current company.
@@ -123,12 +123,20 @@ async def get_employees(
     db: SessionDep,
     company_id: CurrentCompanyId,
     _current_user: CurrentUser,
-    department: Optional[str] = Query(None, description="Filter by department"),
-    role: Optional[str] = Query(None, description="Filter by job role"),
-    is_active: Optional[bool] = Query(None, description="Filter by active status"),
-    search: Optional[str] = Query(None, description="Search by name or employee_id"),
-    skip: int = Query(0, ge=0, description="Skip N items"),
-    limit: int = Query(100, ge=1, le=1000, description="Limit items per page"),
+    department: Annotated[
+        Optional[str], Query(description="Filter by department")
+    ] = None,
+    role: Annotated[Optional[str], Query(description="Filter by job role")] = None,
+    is_active: Annotated[
+        Optional[bool], Query(description="Filter by active status")
+    ] = None,
+    search: Annotated[
+        Optional[str], Query(description="Search by name or employee_id")
+    ] = None,
+    skip: Annotated[int, Query(ge=0, description="Skip N items")] = 0,
+    limit: Annotated[
+        int, Query(ge=1, le=1000, description="Limit items per page")
+    ] = 100,
 ):
     """
     Get all employees for the current company with optional filtering.
@@ -234,7 +242,7 @@ async def update_employee(
     employee_data: EmployeeUpdate,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Update an existing employee.
@@ -337,7 +345,7 @@ async def delete_employee(
     employee_id: UUID,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    _current_user: User = Depends(require_role(UserRole.ADMIN)),
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN))],
 ):
     """
     Delete (soft delete) an employee record.

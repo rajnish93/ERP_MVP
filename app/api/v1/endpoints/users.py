@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timezone
+from typing import Annotated
 from uuid import UUID
 from fastapi import APIRouter, HTTPException, status, Query
 from sqlalchemy import select
@@ -152,8 +153,10 @@ async def get_company_users_endpoint(
     db: SessionDep,
     company_id: CurrentCompanyId,
     _current_user: CurrentUser,
-    skip: int = Query(0, ge=0, description="Skip N items"),
-    limit: int = Query(100, ge=1, le=1000, description="Limit items per page"),
+    skip: Annotated[int, Query(ge=0, description="Skip N items")] = 0,
+    limit: Annotated[
+        int, Query(ge=1, le=1000, description="Limit items per page")
+    ] = 100,
 ):
     """
     Get all users for the current company (workspace).

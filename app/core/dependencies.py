@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Annotated
 from uuid import UUID
 from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
@@ -18,7 +18,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/token
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)
+    token: Annotated[str, Depends(oauth2_scheme)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
     """
     Get the current authenticated user from JWT token.
@@ -84,7 +85,7 @@ async def get_current_user(
 
 
 async def get_current_active_user(
-    current_user: User = Depends(get_current_user),
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
     """Get the current active user (already validated by get_current_user)"""
     return current_user
@@ -94,7 +95,7 @@ def require_role(*allowed_roles: UserRole):
     """Dependency factory for role-based access control"""
 
     async def role_checker(
-        current_user: User = Depends(get_current_active_user),
+        current_user: Annotated[User, Depends(get_current_active_user)],
     ) -> User:
         if current_user.role not in allowed_roles:
             raise HTTPException(
@@ -126,11 +127,12 @@ def require_employee_dependency():
 
 # Company isolation dependency - ensures data is scoped to user's company
 async def get_current_company_id(
-    current_user: User = Depends(get_current_active_user),
-    x_workspace: str | None = Header(
-        None, alias="X-Workspace", description="Workspace slug (e.g. test, xyz)"
-    ),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    x_workspace: Annotated[
+        str | None,
+        Header(alias="X-Workspace", description="Workspace slug (e.g. test, xyz)"),
+    ] = None,
 ) -> UUID:
     """
     Get the current user's company_id for company isolation.

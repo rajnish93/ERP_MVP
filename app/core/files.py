@@ -4,6 +4,7 @@ import logging
 import aiofiles
 from pathlib import Path
 from fastapi import UploadFile, HTTPException, status
+from app.core.config import settings
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -15,7 +16,9 @@ MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
 
 class FileService:
-    def __init__(self, upload_dir: str = "uploads"):
+    def __init__(self, upload_dir: str = None):
+        if upload_dir is None:
+            upload_dir = settings.UPLOAD_DIR
         self.upload_dir = Path(upload_dir)
         # Create upload directory if it doesn't exist
         self.upload_dir.mkdir(parents=True, exist_ok=True)
@@ -68,7 +71,8 @@ class FileService:
             ) from e
 
         # 4. Return Metadata
-        file_url = f"/static/uploads/{unique_filename}"
+        # Use authenticated API endpoint for file access
+        file_url = f"/uploads/{unique_filename}"
 
         return {
             "url": file_url,
@@ -85,11 +89,12 @@ class FileService:
         if not file_url:
             return False
 
-        # Extract filename from URL (assuming /static/uploads/filename)
-        filename = os.path.basename(file_url)
-        file_path = self.upload_dir / filename
-
+        # Extract filename from URL
+        # URL format: /api/v1/uploads/{filename} or old /static/uploads/{filename}
         try:
+            filename = os.path.basename(file_url)
+            file_path = self.upload_dir / filename
+
             if file_path.exists():
                 os.remove(file_path)
                 return True
@@ -101,4 +106,4 @@ class FileService:
 
 
 # Singleton instance
-file_service = FileService(upload_dir="uploads")
+file_service = FileService()

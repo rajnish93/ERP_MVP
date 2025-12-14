@@ -17,3 +17,28 @@ async def upload_file(
     """
     result = await file_service.save_file(file)
     return result
+
+
+@router.get("/{filename}", status_code=status.HTTP_200_OK)
+async def get_file(
+    filename: str,
+    _current_user: CurrentUser,
+):
+    """
+    Get a file secure.
+    Only authenticated users can access.
+    """
+    from fastapi.responses import FileResponse
+    from app.core.config import settings
+    import os
+
+    file_path = os.path.join(settings.UPLOAD_DIR, filename)
+
+    if not os.path.exists(file_path):
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
+        )
+
+    return FileResponse(file_path)

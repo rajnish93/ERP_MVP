@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # Server
     HOST: str = "0.0.0.0"
     PORT: int = 8000
+    UPLOAD_DIR: str = "uploads"
 
     # Security & JWT
     SECRET_KEY: str = (

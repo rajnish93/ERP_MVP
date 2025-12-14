@@ -333,7 +333,7 @@ POST /api/v1/expenses
 - `GET /api/v1/users/` - List users (tenant-scoped)
 - `GET /api/v1/employees` - List employees (tenant-scoped)
 
-### Admin Only Endpoints
+### Admin-Only Endpoints
 - `POST /api/v1/users/create` - Create user
 - `PUT /api/v1/users/{user_id}/deactivate` - Deactivate user
 - `DELETE /api/v1/employees/{employee_id}` - Delete employee

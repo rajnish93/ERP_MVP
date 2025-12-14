@@ -347,8 +347,10 @@ async def get_expenses(
                 id=expense.id,
                 company_id=expense.company_id,
                 employee_id=expense.employee_id,
-                employee_name=expense.employee.name,
-                employee_code=expense.employee.employee_id,
+                employee_name=expense.employee.name if expense.employee else None,
+                employee_code=expense.employee.employee_id
+                if expense.employee
+                else None,
                 title=expense.title,
                 amount=expense.amount,
                 description=expense.description,

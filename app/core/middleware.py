@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -5,6 +6,8 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from app.core.context import set_company_id, reset_company_id
 from app.core.database import AsyncSessionLocal
 from app.core.workspace import resolve_workspace_slug, get_company_id_by_slug
+
+logger = logging.getLogger(__name__)
 
 
 class WorkspaceMiddleware(BaseHTTPMiddleware):
@@ -31,8 +34,12 @@ class WorkspaceMiddleware(BaseHTTPMiddleware):
                 try:
                     company_id = UUID(company_id_str)
                     set_company_id(company_id)
-                except ValueError:
-                    pass
+                except ValueError as e:
+                    logger.warning(
+                        f"Skipping invalid company_id '{company_id_str}' for slug '{slug}'. "
+                        f"Request: {request.method} {request.url.path}. "
+                        f"Error: {e}"
+                    )
 
         # 3. Handling Rejection logic?
         # User requested: "Reject request if workspace not resolved."

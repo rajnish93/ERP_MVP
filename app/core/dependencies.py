@@ -53,28 +53,26 @@ async def get_current_user(
     if email is None:
         raise credentials_exception
 
-    # Find user by email in database
-    stmt = select(User).where(User.email == email)
+    # Require company_id in token (strict multi-tenancy)
+    if not company_id_str:
+        raise credentials_exception
+
+    try:
+        company_id = UUID(company_id_str)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid company_id in token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Find user by email AND company_id in database
+    # This enforces strict tenant isolation at the query level
+    stmt = select(User).where(User.email == email, User.company_id == company_id)
     result = await db.execute(stmt)
     user = result.scalars().first()
     if user is None:
         raise credentials_exception
-
-    # Verify company_id matches (security check for company isolation)
-    # Convert string UUID from token to UUID object for comparison
-    if company_id_str is not None:
-        try:
-            company_id_from_token = UUID(company_id_str)
-            if user.company_id != company_id_from_token:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Token company mismatch - possible security issue",
-                )
-        except (ValueError, TypeError):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid company_id in token",
-            )
 
     if not user.is_active:
         raise HTTPException(

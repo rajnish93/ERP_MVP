@@ -274,8 +274,8 @@ async def main():
         res = await client.delete(
             f"{BASE_URL}/employees/{employee_id}", headers=admin_headers
         )
-        if res.status_code != 200:
-            logger.error(f"❌ Delete Employee Failed: {res.text}")
+        if res.status_code != 204:
+            logger.error(f"❌ Delete Employee Failed: {res.status_code} {res.text}")
             return
         # Verify inactive status
         res = await client.get(

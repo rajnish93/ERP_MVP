@@ -42,14 +42,12 @@ class Employee(Base, UUIDMixin, TimestampMixin, CompanyMixin):
         comment="Optional user account ID. NULL means employee exists but doesn't have login credentials yet. "
         "When downgrading migrations that require NOT NULL, these records must be handled/deleted.",
     )
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
-    department: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    role: Mapped[str] = mapped_column(
-        String(100), nullable=False, index=True, comment="Job role/title"
+    name: Mapped[str] = mapped_column(
+        String(200),
     )
-    joining_date: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    department: Mapped[str] = mapped_column(String(100), index=True)
+    role: Mapped[str] = mapped_column(String(100), index=True, comment="Job role/title")
+    joining_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     employee_id: Mapped[Optional[str]] = mapped_column(
         String(50),
         nullable=True,
@@ -57,7 +55,7 @@ class Employee(Base, UUIDMixin, TimestampMixin, CompanyMixin):
         comment="Optional employee ID/code - unique per company",
     )
     phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Relationships
     company: Mapped["Company"] = relationship("Company", back_populates="employees")

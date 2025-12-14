@@ -55,16 +55,14 @@ class Expense(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     employee_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("employees.id", ondelete="CASCADE", name="fk_expenses_employee"),
-        nullable=False,
         index=True,
         comment="Employee who submitted this expense",
     )
     title: Mapped[str] = mapped_column(
-        String(200), nullable=False, index=True, comment="Expense title/description"
+        String(200), index=True, comment="Expense title/description"
     )
     amount: Mapped[Decimal] = mapped_column(
         Numeric(precision=10, scale=2),
-        nullable=False,
         comment="Expense amount (e.g., 125.50)",
     )
     description: Mapped[Optional[str]] = mapped_column(
@@ -72,13 +70,11 @@ class Expense(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     )
     expense_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
         index=True,
         comment="Date when the expense was incurred",
     )
     status: Mapped[ExpenseStatus] = mapped_column(
         EnumType(ExpenseStatus, length=50),
-        nullable=False,
         default=ExpenseStatus.PENDING,
         server_default=ExpenseStatus.PENDING.value,
         index=True,

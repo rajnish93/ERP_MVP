@@ -45,14 +45,6 @@ class ExpenseUpdate(BaseModel):
     receipt_url: Optional[str] = Field(None, max_length=500)
 
 
-class ExpenseApproval(BaseModel):
-    """Schema for approving an expense"""
-
-    rejection_reason: Optional[str] = Field(
-        None, description="Reason for rejection (required if rejecting)"
-    )
-
-
 class ExpenseRejection(BaseModel):
     """Schema for rejecting an expense"""
 

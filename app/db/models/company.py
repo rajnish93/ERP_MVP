@@ -43,7 +43,7 @@ class Company(Base, UUIDMixin, TimestampMixin):
         UniqueConstraint("email", name="uq_companies_email"),
     )
 
-    name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), index=True)
     slug: Mapped[str] = mapped_column(
         String(50),
         unique=True,
@@ -51,16 +51,13 @@ class Company(Base, UUIDMixin, TimestampMixin):
         server_default="temp-slug",
         comment="URL-friendly identifier (e.g. test-corp)",
     )
-    email: Mapped[str] = mapped_column(
-        String(255), nullable=False, unique=True, index=True
-    )
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     plan_type: Mapped[PlanType] = mapped_column(
         EnumType(PlanType, length=100),
-        nullable=False,
         default=PlanType.FREE,
         server_default=PlanType.FREE.value,
     )
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Relationships
     users: Mapped[List["User"]] = relationship(

@@ -75,24 +75,20 @@ class Asset(Base, UUIDMixin, TimestampMixin, CompanyMixin):
 
     name: Mapped[str] = mapped_column(
         String(200),
-        nullable=False,
         index=True,
         comment="Asset/item name (e.g., 'MacBook Pro 16')",
     )
     asset_type: Mapped[AssetType] = mapped_column(
         EnumType(AssetType, length=50),
-        nullable=False,
         comment="Type of asset (laptop, monitor, etc.)",
     )
     serial_number: Mapped[str] = mapped_column(
         String(100),
-        nullable=False,
         index=True,
         comment="Serial number - unique within company",
     )
     status: Mapped[AssetStatus] = mapped_column(
         EnumType(AssetStatus, length=50),
-        nullable=False,
         default=AssetStatus.AVAILABLE,
         server_default=AssetStatus.AVAILABLE.value,
         index=True,
@@ -100,7 +96,6 @@ class Asset(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     )
     condition: Mapped[AssetCondition] = mapped_column(
         EnumType(AssetCondition, length=50),
-        nullable=False,
         default=AssetCondition.EXCELLENT,
         server_default=AssetCondition.EXCELLENT.value,
         comment="Physical condition of the asset",

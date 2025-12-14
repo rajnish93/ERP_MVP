@@ -17,5 +17,7 @@ api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(employees.router, prefix="/employees", tags=["employees"])
 api_router.include_router(expenses.router, prefix="/expenses", tags=["expenses"])
 api_router.include_router(assets.router, prefix="/assets", tags=["assets"])
-api_router.include_router(password_reset.router, prefix="/auth", tags=["password-reset"])
+api_router.include_router(
+    password_reset.router, prefix="/auth", tags=["password-reset"]
+)
 api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])

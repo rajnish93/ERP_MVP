@@ -12,4 +12,3 @@ SessionDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 CurrentCompanyId = Annotated[UUID, Depends(get_current_company_id)]
 OAuth2Form = Annotated[OAuth2PasswordRequestForm, Depends()]
-

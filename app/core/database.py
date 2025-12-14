@@ -4,7 +4,12 @@ from typing import AsyncGenerator
 from sqlalchemy import DateTime, Uuid, text, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, declared_attr
 from sqlalchemy.sql import func
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    create_async_engine,
+    async_sessionmaker,
+)
 from app.core.config import settings
 
 
@@ -25,15 +30,18 @@ AsyncSessionLocal = async_sessionmaker(
     autocommit=False,
 )
 
+
 class UUIDMixin:
     """Mixin for UUID primary key"""
+
     id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), 
-        primary_key=True, 
-        server_default=text("gen_random_uuid()"))
+        Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+
 
 class TimestampMixin:
     """Mixin for created_at and updated_at timestamps"""
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -44,16 +52,23 @@ class TimestampMixin:
         onupdate=func.now(),
     )
 
+
 class CompanyMixin:
     """Mixin for company_id (multi-tenancy)"""
+
     @declared_attr
     def company_id(cls) -> Mapped[UUID]:
         return mapped_column(
             Uuid(as_uuid=True),
-            ForeignKey("companies.id", ondelete="CASCADE", name=f"fk_{cls.__tablename__}_company"),
+            ForeignKey(
+                "companies.id",
+                ondelete="CASCADE",
+                name=f"fk_{cls.__tablename__}_company",
+            ),
             index=True,
-            comment="Company (workspace) this record belongs to"
+            comment="Company (workspace) this record belongs to",
         )
+
 
 # Base class for declarative models (SQLAlchemy 2.0 syntax)
 class Base(DeclarativeBase):

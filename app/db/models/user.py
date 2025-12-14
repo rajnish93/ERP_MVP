@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 class UserRole(str, enum.Enum):
     """User roles in the system"""
+
     ADMIN = "admin"
     HR = "hr"
     EMPLOYEE = "employee"
@@ -19,6 +20,7 @@ class UserRole(str, enum.Enum):
 
 class User(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     """User model for multi-workspace SaaS - belongs to a company"""
+
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("company_id", "email", name="uq_users_company_email"),
@@ -33,7 +35,7 @@ class User(Base, UUIDMixin, TimestampMixin, CompanyMixin):
         default=UserRole.EMPLOYEE,
         server_default=UserRole.EMPLOYEE.value,
         index=True,
-        comment="User role (admin, hr, employee) - indexed for fast role-based access control queries"
+        comment="User role (admin, hr, employee) - indexed for fast role-based access control queries",
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 

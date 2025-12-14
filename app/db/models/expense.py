@@ -1,7 +1,15 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 from decimal import Decimal
-from sqlalchemy import String, DateTime, ForeignKey, CheckConstraint, Numeric, Text, Uuid
+from sqlalchemy import (
+    String,
+    DateTime,
+    ForeignKey,
+    CheckConstraint,
+    Numeric,
+    Text,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 from uuid import UUID
@@ -17,6 +25,7 @@ if TYPE_CHECKING:
 
 class ExpenseStatus(str, enum.Enum):
     """Expense reimbursement status"""
+
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
@@ -26,50 +35,46 @@ class ExpenseStatus(str, enum.Enum):
 class Expense(Base, UUIDMixin, TimestampMixin, CompanyMixin):
     """
     Expense Reimbursement model - tracks business expenses submitted by employees
-    
+
     Workflow:
     - Employee submits → status = "pending"
     - HR/Admin approves → status = "approved"
     - HR/Admin rejects → status = "rejected"
     - Later: Payroll integration → status = "reimbursed"
     """
+
     __tablename__ = "expenses"
     __table_args__ = (
         CheckConstraint(
             "status IN ('pending', 'approved', 'rejected', 'reimbursed')",
-            name="ck_expenses_status"
+            name="ck_expenses_status",
         ),
         CheckConstraint("amount > 0", name="ck_expenses_amount_positive"),
     )
 
     employee_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), 
-        ForeignKey("employees.id", ondelete="CASCADE", name="fk_expenses_employee"), 
-        nullable=False, 
+        Uuid(as_uuid=True),
+        ForeignKey("employees.id", ondelete="CASCADE", name="fk_expenses_employee"),
+        nullable=False,
         index=True,
-        comment="Employee who submitted this expense"
+        comment="Employee who submitted this expense",
     )
     title: Mapped[str] = mapped_column(
-        String(200), 
-        nullable=False, 
-        index=True, 
-        comment="Expense title/description"
+        String(200), nullable=False, index=True, comment="Expense title/description"
     )
     amount: Mapped[Decimal] = mapped_column(
         Numeric(precision=10, scale=2),
         nullable=False,
-        comment="Expense amount (e.g., 125.50)"
+        comment="Expense amount (e.g., 125.50)",
     )
     description: Mapped[Optional[str]] = mapped_column(
-        Text, 
-        nullable=True,
-        comment="Detailed description of the expense"
+        Text, nullable=True, comment="Detailed description of the expense"
     )
     expense_date: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
+        DateTime(timezone=True),
         nullable=False,
         index=True,
-        comment="Date when the expense was incurred"
+        comment="Date when the expense was incurred",
     )
     status: Mapped[ExpenseStatus] = mapped_column(
         EnumType(ExpenseStatus, length=50),
@@ -77,38 +82,36 @@ class Expense(Base, UUIDMixin, TimestampMixin, CompanyMixin):
         default=ExpenseStatus.PENDING,
         server_default=ExpenseStatus.PENDING.value,
         index=True,
-        comment="Current status of the expense reimbursement"
+        comment="Current status of the expense reimbursement",
     )
     receipt_url: Mapped[Optional[str]] = mapped_column(
-        String(500), 
+        String(500),
         nullable=True,
-        comment="URL/path to uploaded receipt file (optional)"
+        comment="URL/path to uploaded receipt file (optional)",
     )
     approved_by: Mapped[Optional[UUID]] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL", name="fk_expenses_approved_by"),
         nullable=True,
         index=True,
-        comment="User (HR/Admin) who approved/rejected this expense"
+        comment="User (HR/Admin) who approved/rejected this expense",
     )
     approved_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), 
+        DateTime(timezone=True),
         nullable=True,
-        comment="Date when expense was approved/rejected"
+        comment="Date when expense was approved/rejected",
     )
     rejection_reason: Mapped[Optional[str]] = mapped_column(
-        Text,
-        nullable=True,
-        comment="Reason for rejection (if status is rejected)"
+        Text, nullable=True, comment="Reason for rejection (if status is rejected)"
     )
 
     # Relationships
     company: Mapped["Company"] = relationship("Company", back_populates="expenses")
     employee: Mapped["Employee"] = relationship("Employee", back_populates="expenses")
-    approver: Mapped[Optional["User"]] = relationship("User", foreign_keys=[approved_by])
-    
+    approver: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[approved_by]
+    )
+
     def __repr__(self) -> str:
         """String representation of Expense"""
         return f"<Expense(id={self.id}, title={self.title}, amount={self.amount}, status={self.status.value})>"
-
-

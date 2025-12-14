@@ -39,7 +39,7 @@ async def forgot_password(request: PasswordResetRequest, db: SessionDep):
         # Don't reveal workspace existence for security
         return {
             "message": "If the email and workspace are valid, a password reset token has been generated.",
-            "reset_token": None
+            "reset_token": None,
         }
 
     try:
@@ -48,31 +48,30 @@ async def forgot_password(request: PasswordResetRequest, db: SessionDep):
         # Don't reveal invalid workspace configuration
         return {
             "message": "If the email and workspace are valid, a password reset token has been generated.",
-            "reset_token": None
+            "reset_token": None,
         }
 
     # Find user by email AND company_id (tenant-scoped lookup)
     stmt = select(User).where(
-        User.email == request.email,
-        User.company_id == company_id
+        User.email == request.email, User.company_id == company_id
     )
     user = (await db.execute(stmt)).scalars().first()
     if not user:
         # Don't reveal if user exists (security best practice)
         return {
             "message": "If the email and workspace are valid, a password reset token has been generated.",
-            "reset_token": None
+            "reset_token": None,
         }
-    
+
     # Generate reset token
     reset_token = await create_password_reset_token(db, user.email, user.company_id)
-    
+
     # In production: Send email with reset link
     # For MVP: Return token in response (remove in production!)
     return {
         "message": "Password reset token generated. Check your email.",
         "reset_token": reset_token,  # Remove this in production - send via email only
-        "expires_in_minutes": 15
+        "expires_in_minutes": 15,
     }
 
 
@@ -80,11 +79,11 @@ async def forgot_password(request: PasswordResetRequest, db: SessionDep):
 async def reset_password(reset_data: PasswordReset, db: SessionDep):
     """
     Reset password using the reset token.
-    
+
     **Request**:
     - token: Password reset token (from /forgot-password)
     - new_password: New password (min 8 characters)
-    
+
     **Response**: Success message
     """
     # Verify reset token
@@ -92,28 +91,25 @@ async def reset_password(reset_data: PasswordReset, db: SessionDep):
     if not token_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired reset token"
+            detail="Invalid or expired reset token",
         )
-    
+
     # Find user by email AND company_id (tenant-scoped lookup)
     stmt = select(User).where(
-        User.email == token_data["email"],
-        User.company_id == token_data["company_id"]
+        User.email == token_data["email"], User.company_id == token_data["company_id"]
     )
     user = (await db.execute(stmt)).scalars().first()
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-    
+
     # Update password
     user.hashed_password = get_password_hash(reset_data.new_password)
     async with handle_db_operation(db, "reset password"):
         await db.commit()
-    
+
     # Invalidate reset token (one-time use)
     await invalidate_password_reset_token(db, reset_data.token)
-    
-    return PasswordResetResponse(message="Password reset successfully")
 
+    return PasswordResetResponse(message="Password reset successfully")

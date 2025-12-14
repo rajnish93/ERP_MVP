@@ -9,6 +9,7 @@ from alembic import context
 from app.core.database import Base
 from app.core.config import settings
 from app.core.types import EnumType
+
 # Import all models so Alembic can detect them
 from app.db.models import Company, User, Employee  # noqa: F401
 
@@ -78,6 +79,7 @@ def run_migrations_online() -> None:
     # Enum types are now stored as strings with check constraints
     # No enum type management needed
     with connectable.connect() as connection:
+
         def process_revision_directives(context, revision, directives):
             """
             Prevent creating empty migration files when using --autogenerate,
@@ -88,19 +90,26 @@ def run_migrations_online() -> None:
             is_autogenerate = False
             if config.cmd_opts:
                 # Check if --autogenerate flag is present
-                cmd_args = getattr(config.cmd_opts, 'autogenerate', False)
-                if cmd_args or (hasattr(config.cmd_opts, 'cmd') and 'autogenerate' in str(config.cmd_opts)):
+                cmd_args = getattr(config.cmd_opts, "autogenerate", False)
+                if cmd_args or (
+                    hasattr(config.cmd_opts, "cmd")
+                    and "autogenerate" in str(config.cmd_opts)
+                ):
                     is_autogenerate = True
-            
+
             # Only prevent empty migrations when autogenerating
             if is_autogenerate and directives:
                 script = directives[0]
                 # Check if upgrade_ops is empty (no changes detected)
-                if hasattr(script, 'upgrade_ops') and script.upgrade_ops.is_empty():
+                if hasattr(script, "upgrade_ops") and script.upgrade_ops.is_empty():
                     # Clear directives to prevent file creation
                     directives[:] = []
-                    print("INFO: No schema changes detected. Skipping migration file creation.")
-                    print("INFO: To create an empty migration manually, use: alembic revision -m 'message'")
+                    print(
+                        "INFO: No schema changes detected. Skipping migration file creation."
+                    )
+                    print(
+                        "INFO: To create an empty migration manually, use: alembic revision -m 'message'"
+                    )
                     return
 
         def render_item(type_, obj, autogen_context):
@@ -113,11 +122,11 @@ def run_migrations_online() -> None:
                 # If this is an EnumType, render it as sa.String()
                 if isinstance(obj, EnumType):
                     # Get the length from the EnumType instance
-                    length = getattr(obj, 'length', 50)
+                    length = getattr(obj, "length", 50)
                     # Return a string representation that will be written to the migration file
                     # This ensures it's rendered as sa.String() not VARCHAR
                     return f"sa.String(length={length})"
-            
+
             # Return False to use default rendering for other types
             return False
 
@@ -138,4 +147,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-

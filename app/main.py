@@ -27,11 +27,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     for error in exc.errors():
         # Get field path (e.g., "body -> admin_password")
         field_path = " -> ".join(str(loc) for loc in error["loc"])
-        field_name = field_path.split(" -> ")[-1] if " -> " in field_path else str(error["loc"][-1])
-        
+        field_name = (
+            field_path.split(" -> ")[-1]
+            if " -> " in field_path
+            else str(error["loc"][-1])
+        )
+
         # Default message
         msg = error["msg"]
-        
+
         # Custom messages for specific validation errors
         if error["type"] == "string_too_short":
             if "password" in field_name.lower():
@@ -39,36 +43,39 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             else:
                 min_length = error.get("ctx", {}).get("min_length", "required")
                 msg = f"{field_name} is too short. Minimum length is {min_length} characters."
-        
+
         elif error["type"] == "string_too_long":
             if "password" in field_name.lower():
                 msg = "Password cannot exceed 72 characters."
             else:
                 max_length = error.get("ctx", {}).get("max_length", "maximum")
                 msg = f"{field_name} is too long. Maximum length is {max_length} characters."
-        
+
         elif error["type"] == "value_error":
             msg = f"Invalid value for {field_name}. {msg}"
-        
+
         elif error["type"] == "missing":
             msg = f"{field_name} is required."
-        
-        errors.append({
-            "field": field_name,
-            "field_path": field_path,
-            "message": msg,
-            "type": error["type"],
-            "input": error.get("input")
-        })
-    
+
+        errors.append(
+            {
+                "field": field_name,
+                "field_path": field_path,
+                "message": msg,
+                "type": error["type"],
+                "input": error.get("input"),
+            }
+        )
+
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "detail": errors,
             "message": "Validation error. Please check the input data and try again.",
-            "error_count": len(errors)
-        }
+            "error_count": len(errors),
+        },
     )
+
 
 # Note: Database migrations are handled by Alembic
 # Run migrations manually: alembic upgrade head
@@ -97,9 +104,7 @@ os.makedirs("uploads", exist_ok=True)
 app.mount("/static/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
-
 # Health check endpoint (keep at root for Docker health checks)
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
-

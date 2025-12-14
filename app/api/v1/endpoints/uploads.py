@@ -5,6 +5,7 @@ from app.core.deps import CurrentUser
 
 router = APIRouter()
 
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def upload_file(
     _current_user: CurrentUser,

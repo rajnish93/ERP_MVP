@@ -13,6 +13,7 @@ ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "application/pdf"]
 MAX_FILE_SIZE_MB = 5
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
+
 class FileService:
     def __init__(self, upload_dir: str = "uploads"):
         self.upload_dir = Path(upload_dir)
@@ -28,18 +29,18 @@ class FileService:
         if file.content_type not in ALLOWED_MIME_TYPES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_MIME_TYPES)}"
+                detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_MIME_TYPES)}",
             )
-        
+
         # Check size
         file.file.seek(0, 2)
         size = file.file.tell()
         file.file.seek(0)
-        
+
         if size > MAX_FILE_SIZE_BYTES:
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"File too large. Maximum size is {MAX_FILE_SIZE_MB}MB"
+                detail=f"File too large. Maximum size is {MAX_FILE_SIZE_MB}MB",
             )
 
         # 2. Generate Safe Filename
@@ -63,18 +64,18 @@ class FileService:
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Could not save file: {e!r}"
+                detail=f"Could not save file: {e!r}",
             ) from e
 
         # 4. Return Metadata
         file_url = f"/static/uploads/{unique_filename}"
-        
+
         return {
             "url": file_url,
             "filename": unique_filename,
             "content_type": file.content_type,
             "original_filename": file.filename,
-            "size": size
+            "size": size,
         }
 
     async def delete_file(self, file_url: str) -> bool:
@@ -87,7 +88,7 @@ class FileService:
         # Extract filename from URL (assuming /static/uploads/filename)
         filename = os.path.basename(file_url)
         file_path = self.upload_dir / filename
-        
+
         try:
             if file_path.exists():
                 os.remove(file_path)
@@ -97,6 +98,7 @@ class FileService:
             logger.warning(f"Error deleting file {file_path}: {e}")
             return False
         return False
+
 
 # Singleton instance
 file_service = FileService(upload_dir="uploads")

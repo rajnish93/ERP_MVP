@@ -17,19 +17,21 @@ from app.db.models.user import User, UserRole
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/token")
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
+async def get_current_user(
+    token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)
+) -> User:
     """
     Get the current authenticated user from JWT token.
-    
+
     This is the core dependency for FastAPI's OAuth2 Password Flow.
     It extracts the Bearer token from the Authorization header, decodes the JWT,
     and returns the corresponding user.
-    
+
     Usage:
         @router.get("/protected")
         async def protected_route(current_user: User = Depends(get_current_user)):
             return current_user
-    
+
     The token is automatically extracted by OAuth2PasswordBearer from:
     Authorization: Bearer <token>
     """
@@ -38,25 +40,25 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     payload = decode_access_token(token)
     if payload is None:
         raise credentials_exception
-    
+
     # Extract email and company_id from token
     email: Optional[str] = payload.get("sub")
     company_id_str: Optional[str] = payload.get("company_id")
-    
+
     if email is None:
         raise credentials_exception
-    
+
     # Find user by email in database
     stmt = select(User).where(User.email == email)
     result = await db.execute(stmt)
     user = result.scalars().first()
     if user is None:
         raise credentials_exception
-    
+
     # Verify company_id matches (security check for company isolation)
     # Convert string UUID from token to UUID object for comparison
     if company_id_str is not None:
@@ -65,25 +67,24 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
             if user.company_id != company_id_from_token:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Token company mismatch - possible security issue"
+                    detail="Token company mismatch - possible security issue",
                 )
         except (ValueError, TypeError):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid company_id in token"
+                detail="Invalid company_id in token",
             )
-    
+
     if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive"
+            status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive"
         )
-    
+
     return user
 
 
 async def get_current_active_user(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> User:
     """Get the current active user (already validated by get_current_user)"""
     return current_user
@@ -91,13 +92,17 @@ async def get_current_active_user(
 
 def require_role(*allowed_roles: UserRole):
     """Dependency factory for role-based access control"""
-    async def role_checker(current_user: User = Depends(get_current_active_user)) -> User:
+
+    async def role_checker(
+        current_user: User = Depends(get_current_active_user),
+    ) -> User:
         if current_user.role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied. Required roles: {[role.value for role in allowed_roles]}"
+                detail=f"Access denied. Required roles: {[role.value for role in allowed_roles]}",
             )
         return current_user
+
     return role_checker
 
 
@@ -108,9 +113,11 @@ def require_admin_dependency():
     """Dependency for admin-only access"""
     return require_role(UserRole.ADMIN)
 
+
 def require_hr_dependency():
     """Dependency for HR or Admin access"""
     return require_role(UserRole.HR, UserRole.ADMIN)
+
 
 def require_employee_dependency():
     """Dependency for any authenticated user"""
@@ -120,15 +127,17 @@ def require_employee_dependency():
 # Company isolation dependency - ensures data is scoped to user's company
 async def get_current_company_id(
     current_user: User = Depends(get_current_active_user),
-    x_workspace: str | None = Header(None, alias="X-Workspace", description="Workspace slug (e.g. test, xyz)"),
+    x_workspace: str | None = Header(
+        None, alias="X-Workspace", description="Workspace slug (e.g. test, xyz)"
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> UUID:
     """
     Get the current user's company_id for company isolation.
-    
+
     This dependency enforces header-based multi-tenancy using workspace slugs.
     It validates that the `X-Workspace` header matches the authenticated user's company.
-    
+
     Usage:
         @router.get("/employees")
         async def get_employees(
@@ -139,34 +148,34 @@ async def get_current_company_id(
             stmt = select(Employee).where(Employee.company_id == company_id)
             employees = (await db.execute(stmt)).scalars().all()
             return employees
-    """    
+    """
     # If no header provided, just use the user's company_id
     # (This is simpler since we already authenticated the user with company context)
     if not x_workspace:
         return current_user.company_id
-    
+
     # If header is provided, verify it matches user's company
     company_id_str = await get_company_id_by_slug(db, x_workspace)
     if not company_id_str:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Workspace '{x_workspace}' not found"
+            detail=f"Workspace '{x_workspace}' not found",
         )
-    
+
     try:
         header_company_id = UUID(company_id_str)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Invalid workspace configuration"
+            detail="Invalid workspace configuration",
         ) from None
-        
+
     if header_company_id != current_user.company_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Workspace mismatch. X-Workspace does not match your assigned company."
+            detail="Workspace mismatch. X-Workspace does not match your assigned company.",
         )
-        
+
     return current_user.company_id
 
 
@@ -176,4 +185,3 @@ async def get_company_users(company_id: UUID, db: AsyncSession):
     stmt = select(User).where(User.company_id == company_id)
     result = await db.execute(stmt)
     return result.scalars().all()
-

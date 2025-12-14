@@ -9,26 +9,28 @@ class Settings(BaseSettings):
         case_sensitive=True,
         env_parse_none_str=True,
     )
-    
+
     PROJECT_NAME: str = "FastAPI App"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
-    
+
     # CORS - Can be a comma-separated string or JSON array in .env file
     # Example: BACKEND_CORS_ORIGINS=["*"] or BACKEND_CORS_ORIGINS=*
     # Defaults to ["*"] if not provided
     # Use Union to allow both string and list, preventing JSON parsing errors
     BACKEND_CORS_ORIGINS: Union[str, List[str]] = "*"
-    
+
     # Server
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    
+
     # Security & JWT
-    SECRET_KEY: str = "your-secret-key-change-this-in-production-use-openssl-rand-hex-32"
+    SECRET_KEY: str = (
+        "your-secret-key-change-this-in-production-use-openssl-rand-hex-32"
+    )
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
+
     # Database
     # For local development, use "localhost"
     # For Docker, use "postgres" (service name)
@@ -42,7 +44,7 @@ class Settings(BaseSettings):
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     DB_ECHO: bool = False  # Set to True for SQL query logging (useful for debugging)
-    
+
     @field_validator("BACKEND_CORS_ORIGINS")
     @classmethod
     def parse_cors_origins(cls, v):
@@ -50,18 +52,18 @@ class Settings(BaseSettings):
         # If value is None or empty, return default
         if v is None:
             return ["*"]
-        
+
         # If it's already a list, return it
         if isinstance(v, list):
             return v
-        
+
         # Handle string values
         if isinstance(v, str):
             v = v.strip()
             # Handle empty string
             if not v:
                 return ["*"]
-            
+
             # Handle comma-separated string: "http://localhost:3000,http://localhost:8000"
             # Or single value: "*"
             if v == "*":
@@ -69,10 +71,10 @@ class Settings(BaseSettings):
             # Split by comma and strip whitespace
             origins = [origin.strip() for origin in v.split(",") if origin.strip()]
             return origins if origins else ["*"]
-        
+
         # Fallback to default
         return ["*"]
-    
+
     @property
     def DATABASE_URL(self) -> str:
         """Construct async database URL from settings"""
@@ -85,4 +87,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

@@ -11,17 +11,17 @@ logger = logging.getLogger(__name__)
 async def handle_db_operation(db: AsyncSession, operation_name: str):
     """
     Context manager for database operations with automatic error handling.
-    
+
     Usage:
         async with handle_db_operation(db, "create user"):
             # Your database operations here
             db.add(new_user)
             await db.commit()
-    
+
     Args:
         db: AsyncSession instance
         operation_name: Human-readable operation name (e.g., "create user", "update asset")
-    
+
     Raises:
         HTTPException: 500 Internal Server Error if operation fails
     """
@@ -38,5 +38,5 @@ async def handle_db_operation(db: AsyncSession, operation_name: str):
         logger.error(f"Failed to {operation_name}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to {operation_name} due to an internal server error."
+            detail=f"Failed to {operation_name} due to an internal server error.",
         )

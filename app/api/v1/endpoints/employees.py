@@ -23,7 +23,7 @@ async def create_employee(
     employee_data: EmployeeCreate,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
     Create a new employee for the current company.
@@ -122,7 +122,7 @@ async def create_employee(
 async def get_employees(
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: CurrentUser,
+    _current_user: CurrentUser,
     department: Optional[str] = Query(None, description="Filter by department"),
     role: Optional[str] = Query(None, description="Filter by job role"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
@@ -190,7 +190,7 @@ async def get_employee(
     employee_id: UUID,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: CurrentUser,
+    _current_user: CurrentUser,
 ):
     """
     Get a specific employee by ID.
@@ -232,7 +232,7 @@ async def update_employee(
     employee_data: EmployeeUpdate,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
     Update an existing employee.
@@ -337,7 +337,7 @@ async def delete_employee(
     employee_id: UUID,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    _current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
     """
     Delete (soft delete) an employee record.

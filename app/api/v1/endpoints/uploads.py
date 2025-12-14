@@ -7,10 +7,9 @@ router = APIRouter()
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def upload_file(
-    current_user: CurrentUser,
+    _current_user: CurrentUser,
     file: Annotated[UploadFile, File()],
 ):
-    _ = current_user
     """
     Upload a file (Image/PDF).
     Returns the file URL to be used in other resources (e.g., Expenses).

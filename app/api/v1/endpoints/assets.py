@@ -29,7 +29,7 @@ async def create_asset(
     asset_data: AssetCreate,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),  # noqa: B008
+    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
     Create a new asset/device for the current company.
@@ -319,7 +319,7 @@ async def assign_asset(
     assign_data: AssetAssign,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
     Assign an asset to an employee.
@@ -362,7 +362,7 @@ async def assign_asset(
         # Log the reassignment for audit trail
         logger.info(
             f"Asset {asset.id} (serial: {asset.serial_number}) reassigned from employee "
-            f"{asset.assigned_to} to {assign_data.employee_id} by user {current_user.id}"
+            f"{asset.assigned_to} to {assign_data.employee_id} by user {_current_user.id}"
         )
     
     # Assign asset to employee
@@ -394,7 +394,7 @@ async def unassign_asset(
     asset_id: UUID,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
     Unassign an asset from an employee.
@@ -450,7 +450,7 @@ async def delete_asset(
     asset_id: UUID,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    _current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
     """
     Delete an asset.

@@ -146,7 +146,7 @@ async def create_user(
 async def get_company_users_endpoint(
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: CurrentUser,
+    _current_user: CurrentUser,
 ):
     """
     Get all users for the current company (workspace).

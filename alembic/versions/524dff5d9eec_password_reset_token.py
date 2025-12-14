@@ -1,8 +1,8 @@
 """password_reset_token
 
-Revision ID: be0da744d203
+Revision ID: 524dff5d9eec
 Revises: 27686bb983bd
-Create Date: 2025-12-14 10:52:04.579698
+Create Date: 2025-12-14 12:56:11.489481
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'be0da744d203'
+revision: str = '524dff5d9eec'
 down_revision: Union[str, None] = '27686bb983bd'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -23,10 +23,14 @@ def upgrade() -> None:
     op.create_table('password_reset_tokens',
     sa.Column('token', sa.String(), nullable=False),
     sa.Column('email', sa.String(), nullable=False),
-    sa.Column('company_id', sa.Uuid(), nullable=False),
-    sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.PrimaryKeyConstraint('token')
+    sa.Column('expires_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('company_id', sa.Uuid(), nullable=False, comment='Company (workspace) this record belongs to'),
+    sa.ForeignKeyConstraint(['company_id'], ['companies.id'], name='fk_password_reset_tokens_company', ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('token')
     )
     op.create_index(op.f('ix_password_reset_tokens_company_id'), 'password_reset_tokens', ['company_id'], unique=False)
     op.create_index(op.f('ix_password_reset_tokens_email'), 'password_reset_tokens', ['email'], unique=False)

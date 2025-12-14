@@ -1,3 +1,4 @@
+import logging
 from typing import Optional, Annotated
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -23,6 +24,7 @@ from app.schemas.expense import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
@@ -230,6 +232,8 @@ async def get_expenses(
     min_amount: Optional[Decimal] = Query(None, description="Minimum amount filter"),
     max_amount: Optional[Decimal] = Query(None, description="Maximum amount filter"),
     search: Optional[str] = Query(None, description="Search by title or description"),
+    skip: int = Query(0, ge=0, description="Skip N items"),
+    limit: int = Query(100, ge=1, le=1000, description="Limit items per page"),
 ):
     """
     List expenses.
@@ -244,6 +248,7 @@ async def get_expenses(
     - start_date/end_date: Filter by expense date range
     - min_amount/max_amount: Filter by amount range
     - search: Search by title or description
+    - skip/limit: Pagination parameters
     """
     # Base conditions - company isolated
     conditions = [Expense.company_id == company_id]
@@ -301,7 +306,7 @@ async def get_expenses(
     stmt = select(Expense).options(
         selectinload(Expense.employee),
         selectinload(Expense.approver)
-    ).where(*conditions).order_by(Expense.created_at.desc())
+    ).where(*conditions).order_by(Expense.created_at.desc()).offset(skip).limit(limit)
     expenses = (await db.execute(stmt)).scalars().all()
     
     return ExpenseListResponse(
@@ -581,6 +586,8 @@ async def approve_expense(
     async with handle_db_operation(db, "approve expense"):
         await db.commit()
         await db.refresh(expense)
+
+    logger.info(f"Expense {expense.id} approved by user {current_user.id}")
     
     return ExpenseResponse(
         id=expense.id,
@@ -643,6 +650,8 @@ async def reject_expense(
     async with handle_db_operation(db, "reject expense"):
         await db.commit()
         await db.refresh(expense)
+
+    logger.info(f"Expense {expense.id} rejected by user {current_user.id}")
     
     return ExpenseResponse(
         id=expense.id,
@@ -701,6 +710,8 @@ async def reimburse_expense(
     async with handle_db_operation(db, "reimburse expense"):
         await db.commit()
         await db.refresh(expense)
+    
+    logger.info(f"Expense {expense.id} reimbursed by user {_current_user.id}")
     
     return ExpenseResponse(
         id=expense.id,
@@ -780,6 +791,8 @@ async def delete_expense(
     async with handle_db_operation(db, "delete expense"):
         await db.delete(expense)
         await db.commit()
+    
+    logger.info(f"Expense {expense_id} deleted by user {current_user.id}")
     
     # Cleanup file if it existed
     if receipt_to_delete:

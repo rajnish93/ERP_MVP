@@ -98,6 +98,8 @@ async def get_assets(
     asset_type: Optional[str] = Query(None, description="Filter by asset type"),
     assigned: Optional[bool] = Query(None, description="Filter by assignment status (true=assigned, false=unassigned)"),
     search: Optional[str] = Query(None, description="Search by name or serial number"),
+    skip: int = Query(0, ge=0, description="Skip N items"),
+    limit: int = Query(100, ge=1, le=1000, description="Limit items per page"),
 ):
     """
     List all assets for the current company.
@@ -109,6 +111,7 @@ async def get_assets(
     - asset_type: Filter by asset type
     - assigned: Filter by assignment status
     - search: Search by name or serial number
+    - skip/limit: Pagination parameters
     """
     # Base query - company isolated
     stmt = select(Asset).where(Asset.company_id == company_id)
@@ -154,7 +157,7 @@ async def get_assets(
     from sqlalchemy.orm import selectinload
     stmt = stmt.options(selectinload(Asset.employee))
     
-    assets = (await db.execute(stmt.order_by(Asset.created_at.desc()))).scalars().all()
+    assets = (await db.execute(stmt.order_by(Asset.created_at.desc()).offset(skip).limit(limit))).scalars().all()
     
     return AssetListResponse(
         assets=[
@@ -374,6 +377,8 @@ async def assign_asset(
         await db.commit()
         await db.refresh(asset)
     
+    logger.info(f"Asset {asset.id} assigned to employee {assign_data.employee_id} by user {_current_user.id}")
+    
     return AssetResponse(
         id=asset.id,
         company_id=asset.company_id,
@@ -430,6 +435,8 @@ async def unassign_asset(
         await db.commit()
         await db.refresh(asset)
     
+    logger.info(f"Asset {asset.id} unassigned from employee by user {_current_user.id}")
+    
     return AssetResponse(
         id=asset.id,
         company_id=asset.company_id,
@@ -480,5 +487,7 @@ async def delete_asset(
     async with handle_db_operation(db, "delete asset"):
         await db.delete(asset)
         await db.commit()
+    
+    logger.info(f"Asset {asset_id} deleted by user {_current_user.id}")
     
     return None

@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -16,6 +17,7 @@ from app.schemas.employee import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=EmployeeResponse, status_code=status.HTTP_201_CREATED)
@@ -127,6 +129,8 @@ async def get_employees(
     role: Optional[str] = Query(None, description="Filter by job role"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     search: Optional[str] = Query(None, description="Search by name or employee_id"),
+    skip: int = Query(0, ge=0, description="Skip N items"),
+    limit: int = Query(100, ge=1, le=1000, description="Limit items per page"),
 ):
     """
     Get all employees for the current company with optional filtering.
@@ -140,6 +144,7 @@ async def get_employees(
     - role: Filter by job role/title
     - is_active: Filter by active status (true/false)
     - search: Search by employee name or employee_id
+    - skip/limit: Pagination parameters
     """
     # Base query - filter by company (company isolation)
     stmt = select(Employee).where(Employee.company_id == company_id)
@@ -161,7 +166,7 @@ async def get_employees(
         )
         stmt = stmt.where(search_filter)
     
-    employees = (await db.execute(stmt)).scalars().all()
+    employees = (await db.execute(stmt.offset(skip).limit(limit))).scalars().all()
     
     return EmployeeListResponse(
         employees=[
@@ -332,7 +337,7 @@ async def update_employee(
     )
 
 
-@router.delete("/{employee_id}", status_code=status.HTTP_200_OK)
+@router.delete("/{employee_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_employee(
     employee_id: UUID,
     db: SessionDep,
@@ -365,4 +370,6 @@ async def delete_employee(
     async with handle_db_operation(db, "delete employee"):
         await db.commit()
     
-    return {"message": "Employee deleted successfully", "employee_id": employee_id}
+    logger.info(f"Employee {employee_id} soft deleted by user {_current_user.id}")
+    
+    return None

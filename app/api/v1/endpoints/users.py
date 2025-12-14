@@ -1,6 +1,7 @@
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Query
 from sqlalchemy import select
 from app.db.models.user import User, UserRole
 from app.db.models.employee import Employee
@@ -10,6 +11,7 @@ from app.core.error_handlers import handle_db_operation
 from app.schemas.user import UserCreate, UserResponse
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/create", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -131,6 +133,8 @@ async def create_user(
         await db.commit()
         await db.refresh(new_user)
     
+    logger.info(f"User {new_user.id} ({new_user.email}) created by admin {current_user.id}")
+    
     return UserResponse(
         id=new_user.id,
         company_id=new_user.company_id,
@@ -147,6 +151,8 @@ async def get_company_users_endpoint(
     db: SessionDep,
     company_id: CurrentCompanyId,
     _current_user: CurrentUser,
+    skip: int = Query(0, ge=0, description="Skip N items"),
+    limit: int = Query(100, ge=1, le=1000, description="Limit items per page"),
 ):
     """
     Get all users for the current company (workspace).
@@ -155,7 +161,7 @@ async def get_company_users_endpoint(
     
     **Company Isolation**: Users can only see users from their own company.
     """
-    stmt = select(User).where(User.company_id == company_id)
+    stmt = select(User).where(User.company_id == company_id).offset(skip).limit(limit)
     company_users = (await db.execute(stmt)).scalars().all()
     return [
         UserResponse(
@@ -233,7 +239,10 @@ async def deactivate_user(
     
     async with handle_db_operation(db, "deactivate user"):
         await db.commit()
+        await db.commit()
         await db.refresh(user)
+    
+    logger.info(f"User {user.id} ({user.email}) deactivated by admin {current_user.id}")
     
     return UserResponse(
         id=user.id,

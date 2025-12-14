@@ -1,4 +1,5 @@
 import re
+import logging
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -10,6 +11,7 @@ from app.core.security import get_password_hash
 from app.schemas.company import CompanyCreate, CompanyResponse, CompanySignupResponse
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def generate_company_slug(name: str) -> str:
@@ -130,6 +132,8 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create company: {str(e)}"
         )
+    
+    logger.info(f"New company signed up: {new_company.name} ({new_company.slug})")
     
     return CompanySignupResponse(
         company=CompanyResponse(

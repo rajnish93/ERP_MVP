@@ -257,7 +257,10 @@ async def main():
         res = await client.post(f"{BASE_URL}/expenses/", data=reimburse_exp_data, headers=employee_headers)
         reimburse_exp_id = res.json()["id"]
         
-        await client.post(f"{BASE_URL}/expenses/{reimburse_exp_id}/approve", headers=admin_headers)
+        res = await client.post(f"{BASE_URL}/expenses/{reimburse_exp_id}/approve", headers=admin_headers)
+        if res.status_code != 200:
+             print(f"❌ Approve Expense (Reimburse Flow) Failed: {res.text}")
+             return
         
         res = await client.post(f"{BASE_URL}/expenses/{reimburse_exp_id}/reimburse", headers=admin_headers)
         if res.status_code != 200:
@@ -301,7 +304,11 @@ async def main():
              print(f"❌ Company 2 Signup Failed: {res.text}")
              return
         
-        company2_slug = res.json()["company"]["slug"]
+        c2_data = res.json()
+        if "company" not in c2_data or "slug" not in c2_data["company"]:
+             print(f"❌ Company 2 Signup Response Missing Keys: {c2_data}")
+             return
+        company2_slug = c2_data["company"]["slug"]
         
         # Login
         evil_login_data = {"username": f"{company2_data['admin_email']}|{company2_slug}", "password": "password"}

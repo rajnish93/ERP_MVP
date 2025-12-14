@@ -158,16 +158,18 @@ Employees have restricted access and can only manage their own data.
 
 | Feature | Admin | HR | Employee |
 |---------|:----:|:--:|:--------:|
-| **User Management** |
+| Feature | Admin | HR | Employee |
+|---------|:----:|:--:|:--------:|
+| <td colspan=4 align="center"><b>User Management</b></td> |
 | Create Users | ✅ | ❌ | ❌ |
 | View All Users | ✅ | ✅ | ✅ |
 | Deactivate Users | ✅ | ❌ | ❌ |
-| **Employee Management** |
+| <td colspan=4 align="center"><b>Employee Management</b></td> |
 | Create Employees | ✅ | ✅ | ❌ |
 | View All Employees | ✅ | ✅ | ✅ |
 | Update Employees | ✅ | ✅ | ❌ |
 | Delete Employees | ✅ | ❌ | ❌ |
-| **Expense Management** |
+| <td colspan=4 align="center"><b>Expense Management</b></td> |
 | View All Expenses | ✅ | ✅ | ❌ (Own only) |
 | Submit Expenses | ✅ (Any) | ✅ (Any) | ✅ (Own only) |
 | Approve Expenses | ✅ | ✅ | ❌ |
@@ -176,7 +178,8 @@ Employees have restricted access and can only manage their own data.
 
 | Update Expenses | ✅ (Any) | ✅ (Any) | ✅ (Own pending only) |
 | Delete Expenses | ✅ (Any) | ✅ (Any) | ✅ (Own pending only) |
-| **Asset Management** |
+| Delete Expenses | ✅ (Any) | ✅ (Any) | ✅ (Own pending only) |
+| <td colspan=4 align="center"><b>Asset Management</b></td> |
 | Create Assets | ✅ | ✅ | ❌ |
 | View All Assets | ✅ | ✅ | ❌ (Assigned only) |
 | Update Assets | ✅ | ✅ | ❌ |
@@ -234,7 +237,7 @@ Employees have restricted access and can only manage their own data.
 
 ### Current Workflow
 
-```
+```text
 Step 1: Admin/HR creates Employee Record
   → Employee exists in system (no user account yet)
   → Employee cannot login or submit expenses

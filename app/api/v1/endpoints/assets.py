@@ -168,8 +168,8 @@ async def get_assets(
                 condition=asset.condition,
                 assigned_to=asset.assigned_to,
                 issue_date=asset.issue_date,
-                employee_name=asset.employee.name,
-                employee_code=asset.employee.employee_id,
+                employee_name=asset.employee.name if asset.employee else None,
+                employee_code=asset.employee.employee_id if asset.employee else None,
                 created_at=asset.created_at,
                 updated_at=asset.updated_at,
             )
@@ -253,7 +253,7 @@ async def update_asset(
     asset_data: AssetUpdate,
     db: SessionDep,
     company_id: CurrentCompanyId,
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    _current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
 ):
     """
     Update asset details.
@@ -360,7 +360,7 @@ async def assign_asset(
     # Check if asset is being reassigned from another employee
     if asset.assigned_to and asset.assigned_to != assign_data.employee_id:
         # Log the reassignment for audit trail
-        logger.warning(
+        logger.info(
             f"Asset {asset.id} (serial: {asset.serial_number}) reassigned from employee "
             f"{asset.assigned_to} to {assign_data.employee_id} by user {current_user.id}"
         )

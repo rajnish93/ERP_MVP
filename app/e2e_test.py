@@ -2,7 +2,6 @@ import asyncio
 import httpx
 import logging
 import os
-import requests
 import uuid
 from datetime import datetime
 from dotenv import load_dotenv

@@ -1,6 +1,6 @@
 import os
 from fastapi import FastAPI, Request, status
-
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,13 +9,25 @@ from app.core.config import settings
 from app.core.middleware import WorkspaceMiddleware
 
 # Create main FastAPI app with all routes under /api/v1
+# conditionally hide docs in production
+docs_url = (
+    f"{settings.API_V1_STR}/docs"
+    if settings.ENVIRONMENT.lower() != "production"
+    else None
+)
+openapi_url = (
+    f"{settings.API_V1_STR}/openapi.json"
+    if settings.ENVIRONMENT.lower() != "production"
+    else None
+)
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description="FastAPI application with Docker and Nginx",
-    docs_url=f"{settings.API_V1_STR}/docs",  # Only Swagger at /api/v1/docs
-    redoc_url=None,  # Disable ReDoc
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",  # Required for Swagger docs to work
+    docs_url=docs_url,
+    redoc_url=None,  # Disable ReDoc always (or make conditional too)
+    openapi_url=openapi_url,
 )
 
 
@@ -86,6 +98,7 @@ if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_origin_regex=settings.BACKEND_CORS_ORIGIN_REGEX,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -93,6 +106,9 @@ if settings.BACKEND_CORS_ORIGINS:
 
 # Add Workspace Middleware
 app.add_middleware(WorkspaceMiddleware)
+
+# Add Trusted Host Middleware (Security)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 
 # Include API router under /api/v1 prefix
 app.include_router(api_router, prefix=settings.API_V1_STR)

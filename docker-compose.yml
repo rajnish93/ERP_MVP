@@ -4,9 +4,9 @@ services:
     container_name: erp_postgres
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=erp_db
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-erp_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -26,14 +26,20 @@ services:
     container_name: fastapi_app
     restart: unless-stopped
     environment:
-      - PROJECT_NAME=FastAPI App
-      - VERSION=1.0.0
-      - API_V1_STR=/api/v1
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=erp_db
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
+      - PROJECT_NAME=${PROJECT_NAME:-FastAPI App}
+      - VERSION=${VERSION:-1.0.0}
+      - API_V1_STR=${API_V1_STR:-/api/v1}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-erp_db}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      # Security settings injected from env
+      - SECRET_KEY=${SECRET_KEY:-local_insecure_secret_key}
+      - ENVIRONMENT=${ENVIRONMENT:-local}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-["*"]}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["http://localhost:3000","http://lvh.me:3000"]}
+      - BACKEND_CORS_ORIGIN_REGEX=${BACKEND_CORS_ORIGIN_REGEX:-^http://(?:.+\.)?lvh\.me:3000$}
     volumes:
       - ./app:/app/app
       - ./alembic:/app/alembic
@@ -50,7 +56,7 @@ services:
         echo 'Running database migrations...' &&
         alembic upgrade head &&
         echo 'Starting FastAPI application...' &&
-        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+        uvicorn app.main:app --host 0.0.0.0 --port 8000
       "
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]

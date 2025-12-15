@@ -53,7 +53,7 @@ class Company(Base, UUIDMixin, TimestampMixin):
         index=True,
         comment="URL-friendly identifier (e.g. test-corp)",
     )
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
     plan_type: Mapped[PlanType] = mapped_column(
         EnumType(PlanType, length=100),
         default=PlanType.FREE,

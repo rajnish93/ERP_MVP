@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     #
     # Note: In production, for security, you must list specific domains.
     # Don't use "*" because it's not safe when cookies/credentials are involved.
-    BACKEND_CORS_ORIGINS: Union[List[str], str] = []
+    BACKEND_CORS_ORIGINS: List[str] = []
 
     # Advanced CORS: Subdomain Support
     # Use this if you have dynamic subdomains like tenant1.yourdomain.com.
@@ -46,21 +46,6 @@ class Settings(BaseSettings):
     )
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-
-    @field_validator("SECRET_KEY")
-    @classmethod
-    def validate_secret_key(cls, v: str, info) -> str:
-        """
-        Fail-fast check to prevent using insecure default in production-like environments.
-        This ensures we don't accidentally deploy with a known secret.
-        """
-
-        # Access ENVIRONMENT from the instance if possible, or assume 'local' if not yet validated
-        # Note: field_validator context doesn't easily give access to other fields yet processed
-        # unless using model_validator.
-        # But we can check os.getenv for immediate fail-fast or rely on model_validator.
-        # We will relax this check here and enforce strictness in model_validator.
-        return v
 
     @field_validator("ALLOWED_HOSTS", mode="before")
     @classmethod

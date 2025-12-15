@@ -1,13 +1,16 @@
-from datetime import datetime
 from typing import TYPE_CHECKING, List
-from sqlalchemy import String, Boolean, DateTime, CheckConstraint, UniqueConstraint, PrimaryKeyConstraint
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
+from sqlalchemy import (
+    String,
+    Boolean,
+    CheckConstraint,
+    UniqueConstraint,
+    PrimaryKeyConstraint,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 import enum
-import uuid
+import re
 
-from app.core.database import Base
+from app.core.database import Base, UUIDMixin, TimestampMixin
 from app.core.types import EnumType
 
 if TYPE_CHECKING:
@@ -17,56 +20,72 @@ if TYPE_CHECKING:
     from app.db.models.expense import Expense
 
 
+SLUG_REGEX_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+
+
 class PlanType(str, enum.Enum):
     """Company subscription plan types"""
+
     FREE = "free"
     PRO = "pro"
     ENTERPRISE = "enterprise"
 
 
-class Company(Base):
-    """Company (Tenant) model for multi-tenant SaaS"""
+class Company(Base, UUIDMixin, TimestampMixin):
+    """Company model for multi-workspace SaaS"""
+
     __tablename__ = "companies"
     __table_args__ = (
-        PrimaryKeyConstraint('id', name='pk_companies_id'),
+        PrimaryKeyConstraint("id", name="pk_companies_id"),
         CheckConstraint(
-            "plan_type IN ('free', 'pro', 'enterprise')",
-            name="ck_companies_plan_type"
+            "plan_type IN ('free', 'pro', 'enterprise')", name="ck_companies_plan_type"
         ),
-        UniqueConstraint('email', name='uq_companies_email'),
+        CheckConstraint(
+            f"slug ~ '{SLUG_REGEX_PATTERN}'", name="ck_companies_slug_format"
+        ),
+        UniqueConstraint("email", name="uq_companies_email"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), 
-        primary_key=True, 
-        default=uuid.uuid4, 
+    name: Mapped[str] = mapped_column(String(200), index=True)
+    slug: Mapped[str] = mapped_column(
+        String(50),
+        unique=True,
         index=True,
-        comment="Primary key - explicitly named as pk_companies_id"
+        comment="URL-friendly identifier (e.g. test-corp)",
     )
-    name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
     plan_type: Mapped[PlanType] = mapped_column(
         EnumType(PlanType, length=100),
-        nullable=False,
         default=PlanType.FREE,
-        server_default=PlanType.FREE.value
+        server_default=PlanType.FREE.value,
     )
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        server_default=func.now(), 
-        nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        server_default=func.now(), 
-        onupdate=func.now(), 
-        nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Relationships
-    users: Mapped[List["User"]] = relationship("User", back_populates="company", cascade="all, delete-orphan")
-    employees: Mapped[List["Employee"]] = relationship("Employee", back_populates="company", cascade="all, delete-orphan")
-    assets: Mapped[List["Asset"]] = relationship("Asset", back_populates="company", cascade="all, delete-orphan")
-    expenses: Mapped[List["Expense"]] = relationship("Expense", back_populates="company", cascade="all, delete-orphan")
+    users: Mapped[List["User"]] = relationship(
+        "User", back_populates="company", cascade="all, delete-orphan"
+    )
+    employees: Mapped[List["Employee"]] = relationship(
+        "Employee", back_populates="company", cascade="all, delete-orphan"
+    )
+    assets: Mapped[List["Asset"]] = relationship(
+        "Asset", back_populates="company", cascade="all, delete-orphan"
+    )
+    expenses: Mapped[List["Expense"]] = relationship(
+        "Expense", back_populates="company", cascade="all, delete-orphan"
+    )
 
+    @validates("slug")
+    def validate_slug(self, key, slug):
+        """Validate slug format: lowercase alphanumeric with hyphens"""
+        if not slug:
+            raise ValueError("Slug cannot be empty")
+
+        # Check format: lowercase letters, numbers, and hyphens only
+        if not re.match(SLUG_REGEX_PATTERN, slug):
+            raise ValueError(
+                "Slug must contain only lowercase letters, numbers, and hyphens. "
+                "It cannot start or end with a hyphen."
+            )
+
+        return slug.lower()

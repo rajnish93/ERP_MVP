@@ -1,15 +1,16 @@
-from typing import Optional
+import logging
+from typing import Optional, Annotated
 from datetime import datetime, timezone
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 
-from app.core.database import get_db
+from app.core.deps import SessionDep, CurrentCompanyId, CurrentUser
+from app.core.error_handlers import handle_db_operation
 from app.db.models.asset import Asset, AssetStatus
 from app.db.models.employee import Employee
 from app.db.models.user import User, UserRole
-from app.core.dependencies import get_current_active_user, get_current_company_id, require_role
+from app.core.dependencies import require_role
 from app.schemas.asset import (
     AssetCreate,
     AssetUpdate,
@@ -20,22 +21,23 @@ from app.schemas.asset import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
 async def create_asset(
     asset_data: AssetCreate,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Create a new asset/device for the current company.
-    
+
     **Access**: Admin and HR only
-    
-    **Tenant Isolation**: Assets are automatically assigned to the current user's company.
-    
+
+    **Company Isolation**: Assets are automatically assigned to the current user's company.
+
     **Request**:
     - name: Asset/item name
     - asset_type: Type of asset (laptop, monitor, etc.)
@@ -44,20 +46,20 @@ async def create_asset(
     - status: Initial status (defaults to 'available')
     """
     # Check if serial_number is unique within company
-    existing_asset = db.query(Asset).filter(
-        Asset.serial_number == asset_data.serial_number,
-        Asset.company_id == company_id
-    ).first()
-    
+    stmt = select(Asset).where(
+        Asset.serial_number == asset_data.serial_number, Asset.company_id == company_id
+    )
+    existing_asset = (await db.execute(stmt)).scalars().first()
+
     if existing_asset:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Asset with serial number '{asset_data.serial_number}' already exists in your company"
+            detail=f"Asset with serial number '{asset_data.serial_number}' already exists in your company",
         )
-    
+
     # Create new asset
     new_asset = Asset(
-        company_id=company_id,  # Tenant isolation
+        company_id=company_id,  # Company isolation
         name=asset_data.name,
         asset_type=asset_data.asset_type,
         serial_number=asset_data.serial_number,
@@ -66,10 +68,11 @@ async def create_asset(
         assigned_to=None,  # Initially unassigned
         issue_date=None,
     )
-    db.add(new_asset)
-    db.commit()
-    db.refresh(new_asset)
-    
+    async with handle_db_operation(db, "create asset"):
+        db.add(new_asset)
+        await db.commit()
+        await db.refresh(new_asset)
+
     return AssetResponse(
         id=new_asset.id,
         company_id=new_asset.company_id,
@@ -87,66 +90,93 @@ async def create_asset(
 
 @router.get("/", response_model=AssetListResponse)
 async def get_assets(
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(get_current_active_user),
-    status_filter: Optional[AssetStatus] = Query(None, alias="status", description="Filter by asset status"),
-    asset_type: Optional[str] = Query(None, description="Filter by asset type"),
-    assigned: Optional[bool] = Query(None, description="Filter by assignment status (true=assigned, false=unassigned)"),
-    search: Optional[str] = Query(None, description="Search by name or serial number"),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
+    status_filter: Annotated[
+        Optional[AssetStatus],
+        Query(alias="status", description="Filter by asset status"),
+    ] = None,
+    asset_type: Annotated[
+        Optional[str], Query(description="Filter by asset type")
+    ] = None,
+    assigned: Annotated[
+        Optional[bool],
+        Query(
+            description="Filter by assignment status (true=assigned, false=unassigned)"
+        ),
+    ] = None,
+    search: Annotated[
+        Optional[str], Query(description="Search by name or serial number")
+    ] = None,
+    skip: Annotated[int, Query(ge=0, description="Skip N items")] = 0,
+    limit: Annotated[
+        int, Query(ge=1, le=1000, description="Limit items per page")
+    ] = 100,
 ):
     """
     List all assets for the current company.
-    
+
     **Access**: All authenticated users (HR/Admin can see all, Employees see assigned assets)
-    
+
     **Filters**:
     - status: Filter by asset status
     - asset_type: Filter by asset type
     - assigned: Filter by assignment status
     - search: Search by name or serial number
+    - skip/limit: Pagination parameters
     """
-    # Base query - tenant isolated
-    query = db.query(Asset).filter(Asset.company_id == company_id)
-    
+    # Base query - company isolated
+    stmt = select(Asset).where(Asset.company_id == company_id)
+
     # Apply filters
     if status_filter:
-        query = query.filter(Asset.status == status_filter)
-    
+        stmt = stmt.where(Asset.status == status_filter)
+
     if asset_type:
-        query = query.filter(Asset.asset_type == asset_type)
-    
+        stmt = stmt.where(Asset.asset_type == asset_type)
+
     if assigned is not None:
         if assigned:
-            query = query.filter(Asset.assigned_to.isnot(None))
+            stmt = stmt.where(Asset.assigned_to.isnot(None))
         else:
-            query = query.filter(Asset.assigned_to.is_(None))
-    
+            stmt = stmt.where(Asset.assigned_to.is_(None))
+
     if search:
         search_term = f"%{search}%"
-        query = query.filter(
-            or_(
-                Asset.name.ilike(search_term),
-                Asset.serial_number.ilike(search_term)
-            )
+        stmt = stmt.where(
+            or_(Asset.name.ilike(search_term), Asset.serial_number.ilike(search_term))
         )
-    
+
     # Employees can only see assets assigned to them
     if current_user.role == UserRole.EMPLOYEE:
         # Get employee record for current user
-        employee = db.query(Employee).filter(
-            Employee.user_id == current_user.id,
-            Employee.company_id == company_id
-        ).first()
-        
+        emp_stmt = select(Employee).where(
+            Employee.user_id == current_user.id, Employee.company_id == company_id
+        )
+        employee = (await db.execute(emp_stmt)).scalars().first()
+
         if employee:
-            query = query.filter(Asset.assigned_to == employee.id)
+            stmt = stmt.where(Asset.assigned_to == employee.id)
         else:
             # Employee without employee record sees nothing
             return AssetListResponse(assets=[], total=0)
-    
-    assets = query.order_by(Asset.created_at.desc()).all()
-    
+
+    # Eager load employee relationship for name display
+    from sqlalchemy.orm import selectinload
+
+    stmt = stmt.options(selectinload(Asset.employee))
+
+    assets = (
+        (
+            await db.execute(
+                stmt.order_by(Asset.created_at.desc()).offset(skip).limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
     return AssetListResponse(
         assets=[
             AssetResponse(
@@ -159,6 +189,8 @@ async def get_assets(
                 condition=asset.condition,
                 assigned_to=asset.assigned_to,
                 issue_date=asset.issue_date,
+                employee_name=asset.employee.name if asset.employee else None,
+                employee_code=asset.employee.employee_id if asset.employee else None,
                 created_at=asset.created_at,
                 updated_at=asset.updated_at,
             )
@@ -171,52 +203,50 @@ async def get_assets(
 @router.get("/{asset_id}", response_model=AssetDetailResponse)
 async def get_asset(
     asset_id: UUID,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(get_current_active_user),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    current_user: CurrentUser,
 ):
     """
     Get asset details by ID.
-    
+
     **Access**: All authenticated users (Employees can only view assets assigned to them)
     """
-    asset = db.query(Asset).filter(
-        Asset.id == asset_id,
-        Asset.company_id == company_id
-    ).first()
-    
+    stmt = select(Asset).where(Asset.id == asset_id, Asset.company_id == company_id)
+    asset = (await db.execute(stmt)).scalars().first()
+
     if not asset:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Asset not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found"
         )
-    
+
     # Employees can only see assets assigned to them
     if current_user.role == UserRole.EMPLOYEE:
-        employee = db.query(Employee).filter(
-            Employee.user_id == current_user.id,
-            Employee.company_id == company_id
-        ).first()
-        
+        stmt = select(Employee).where(
+            Employee.user_id == current_user.id, Employee.company_id == company_id
+        )
+        employee = (await db.execute(stmt)).scalars().first()
+
         if not employee or asset.assigned_to != employee.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied. You can only view assets assigned to you."
+                detail="Access denied. You can only view assets assigned to you.",
             )
-    
+
     # Get employee details if assigned
     employee_data = None
     if asset.assigned_to:
-        employee = db.query(Employee).filter(Employee.id == asset.assigned_to).first()
-        if employee:
+        stmt = select(Employee).where(Employee.id == asset.assigned_to)
+        assigned_employee = (await db.execute(stmt)).scalars().first()
+        if assigned_employee:
             employee_data = {
-                "id": str(employee.id),
-                "name": employee.name,
-                "department": employee.department,
-                "role": employee.role,
-                "employee_id": employee.employee_id,
+                "id": str(assigned_employee.id),
+                "name": assigned_employee.name,
+                "department": assigned_employee.department,
+                "role": assigned_employee.role,
+                "employee_id": assigned_employee.employee_id,
             }
-    
+
     return AssetDetailResponse(
         id=asset.id,
         company_id=asset.company_id,
@@ -237,50 +267,49 @@ async def get_asset(
 async def update_asset(
     asset_id: UUID,
     asset_data: AssetUpdate,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Update asset details.
-    
+
     **Access**: Admin and HR only
-    
+
     **Note**: To assign/unassign assets, use the /assign endpoint.
     """
-    asset = db.query(Asset).filter(
-        Asset.id == asset_id,
-        Asset.company_id == company_id
-    ).first()
-    
+    stmt = select(Asset).where(Asset.id == asset_id, Asset.company_id == company_id)
+    asset = (await db.execute(stmt)).scalars().first()
+
     if not asset:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Asset not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found"
         )
-    
+
     # Check if serial_number is unique (if being updated)
     if asset_data.serial_number and asset_data.serial_number != asset.serial_number:
-        existing_asset = db.query(Asset).filter(
+        stmt = select(Asset).where(
             Asset.serial_number == asset_data.serial_number,
             Asset.company_id == company_id,
-            Asset.id != asset_id
-        ).first()
-        
+            Asset.id != asset_id,
+        )
+        existing_asset = (await db.execute(stmt)).scalars().first()
+
         if existing_asset:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Asset with serial number '{asset_data.serial_number}' already exists in your company"
+                detail=f"Asset with serial number '{asset_data.serial_number}' already exists in your company",
             )
-    
+
     # Update fields
     update_data = asset_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(asset, field, value)
-    
-    db.commit()
-    db.refresh(asset)
-    
+
+    async with handle_db_operation(db, "update asset"):
+        await db.commit()
+        await db.refresh(asset)
+
     return AssetResponse(
         id=asset.id,
         company_id=asset.company_id,
@@ -300,52 +329,69 @@ async def update_asset(
 async def assign_asset(
     asset_id: UUID,
     assign_data: AssetAssign,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Assign an asset to an employee.
-    
+
     **Access**: Admin and HR only
-    
+
     **Request**:
     - employee_id: Employee ID to assign asset to
-    
+
     **Note**: If asset is already assigned to another employee, it will be reassigned.
     Automatically sets status to 'assigned' and issue_date to current date.
     """
-    asset = db.query(Asset).filter(
-        Asset.id == asset_id,
-        Asset.company_id == company_id
-    ).first()
-    
+    stmt = select(Asset).where(Asset.id == asset_id, Asset.company_id == company_id)
+    asset = (await db.execute(stmt)).scalars().first()
+
     if not asset:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Asset not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found"
         )
-    
+
     # Verify employee exists and belongs to same company
-    employee = db.query(Employee).filter(
-        Employee.id == assign_data.employee_id,
-        Employee.company_id == company_id
-    ).first()
-    
+    stmt = select(Employee).where(
+        Employee.id == assign_data.employee_id, Employee.company_id == company_id
+    )
+    employee = (await db.execute(stmt)).scalars().first()
+
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Employee not found in your company"
+            detail="Employee not found in your company",
         )
-    
+
+    # Check if asset is being reassigned from another employee
+    if asset.assigned_to and asset.assigned_to != assign_data.employee_id:
+        # Log the reassignment for audit trail
+        logger.info(
+            "Asset %s (serial: %s) reassigned from employee %s to %s by user %s",
+            asset.id,
+            asset.serial_number,
+            asset.assigned_to,
+            assign_data.employee_id,
+            _current_user.id,
+        )
+
     # Assign asset to employee
     asset.assigned_to = assign_data.employee_id
     asset.status = AssetStatus.ASSIGNED
     asset.issue_date = datetime.now(timezone.utc)
-    
-    db.commit()
-    db.refresh(asset)
-    
+
+    async with handle_db_operation(db, "assign asset"):
+        await db.commit()
+        await db.refresh(asset)
+
+    logger.info(
+        "Asset %s assigned to employee %s by user %s",
+        asset.id,
+        assign_data.employee_id,
+        _current_user.id,
+    )
+
     return AssetResponse(
         id=asset.id,
         company_id=asset.company_id,
@@ -364,42 +410,44 @@ async def assign_asset(
 @router.post("/{asset_id}/unassign", response_model=AssetResponse)
 async def unassign_asset(
     asset_id: UUID,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.HR)),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN, UserRole.HR))],
 ):
     """
     Unassign an asset from an employee.
-    
+
     **Access**: Admin and HR only
-    
+
     **Note**: Automatically sets status to 'available' and clears issue_date.
     """
-    asset = db.query(Asset).filter(
-        Asset.id == asset_id,
-        Asset.company_id == company_id
-    ).first()
-    
+    stmt = select(Asset).where(Asset.id == asset_id, Asset.company_id == company_id)
+    asset = (await db.execute(stmt)).scalars().first()
+
     if not asset:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Asset not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found"
         )
-    
+
     if not asset.assigned_to:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Asset is not currently assigned to any employee"
+            detail="Asset is not currently assigned to any employee",
         )
-    
+
     # Unassign asset
     asset.assigned_to = None
     asset.status = AssetStatus.AVAILABLE
     asset.issue_date = None
-    
-    db.commit()
-    db.refresh(asset)
-    
+
+    async with handle_db_operation(db, "unassign asset"):
+        await db.commit()
+        await db.refresh(asset)
+
+    logger.info(
+        "Asset %s unassigned from employee by user %s", asset.id, _current_user.id
+    )
+
     return AssetResponse(
         id=asset.id,
         company_id=asset.company_id,
@@ -418,36 +466,35 @@ async def unassign_asset(
 @router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_asset(
     asset_id: UUID,
-    db: Session = Depends(get_db),
-    company_id: UUID = Depends(get_current_company_id),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    db: SessionDep,
+    company_id: CurrentCompanyId,
+    _current_user: Annotated[User, Depends(require_role(UserRole.ADMIN))],
 ):
     """
     Delete an asset.
-    
+
     **Access**: Admin only
-    
+
     **Note**: Only unassigned assets can be deleted. Assign assets to 'retired' status instead of deleting.
     """
-    asset = db.query(Asset).filter(
-        Asset.id == asset_id,
-        Asset.company_id == company_id
-    ).first()
-    
+    stmt = select(Asset).where(Asset.id == asset_id, Asset.company_id == company_id)
+    asset = (await db.execute(stmt)).scalars().first()
+
     if not asset:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Asset not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found"
         )
-    
+
     if asset.assigned_to:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete asset that is assigned to an employee. Unassign it first."
+            detail="Cannot delete asset that is assigned to an employee. Unassign it first.",
         )
-    
-    db.delete(asset)
-    db.commit()
-    
-    return None
 
+    async with handle_db_operation(db, "delete asset"):
+        await db.delete(asset)
+        await db.commit()
+
+    logger.info("Asset %s deleted by user %s", asset_id, _current_user.id)
+
+    return None

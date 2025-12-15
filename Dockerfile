@@ -59,16 +59,28 @@ ENV VIRTUAL_ENV=/app/.venv \
 # This includes all installed Python packages but NOT UV itself
 COPY --from=builder /app/.venv /app/.venv
 
+# Create a non-root user
+RUN addgroup --system --gid 1001 appgroup && \
+    adduser --system --uid 1001 --gid 1001 appuser
+
 # Copy application code
-COPY ./app /app/app
+COPY --chown=appuser:appgroup ./app /app/app
 
 # Copy Alembic configuration and migrations
-COPY ./alembic /app/alembic
-COPY ./alembic.ini /app/alembic.ini
+COPY --chown=appuser:appgroup ./alembic /app/alembic
+COPY --chown=appuser:appgroup ./alembic.ini /app/alembic.ini
+
+# Create uploads directory and set permissions
+# This ensures appuser can write to it at runtime
+RUN mkdir -p /app/uploads && \
+    chown -R appuser:appgroup /app/uploads
+
+# Switch to non-root user
+USER appuser
 
 # Expose port 8000 for the FastAPI application
 EXPOSE 8000
 
-# Run the FastAPI application using uvicorn with hot reload enabled
-# --reload flag enables automatic reload when code changes (development mode)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Run the FastAPI application using uvicorn in production mode
+# Workers should be managed by the container orchestrator (e.g., K8s) or set via Gunicorn
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

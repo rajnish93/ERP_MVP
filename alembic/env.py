@@ -1,17 +1,15 @@
 from logging.config import fileConfig
 
 import sqlalchemy as sa
-from sqlalchemy import engine_from_config, text, String
 from sqlalchemy import pool
 
 from alembic import context
-from alembic.autogenerate import compare_metadata
-from alembic.operations.ops import MigrationScript
 
 # Import your models and Base
 from app.core.database import Base
 from app.core.config import settings
 from app.core.types import EnumType
+
 # Import all models so Alembic can detect them
 from app.db.models import Company, User, Employee  # noqa: F401
 
@@ -24,8 +22,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set the database URL from settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Set the sync database URL from settings (Alembic needs sync connection)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL_SYNC)
 
 # add your model's MetaData object here
 # for 'autogenerate' support
@@ -72,15 +70,16 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    # Create sync engine explicitly for Alembic (uses psycopg2, no greenlet needed)
+    connectable = sa.create_engine(
+        settings.DATABASE_URL_SYNC,
         poolclass=pool.NullPool,
     )
 
     # Enum types are now stored as strings with check constraints
     # No enum type management needed
     with connectable.connect() as connection:
+
         def process_revision_directives(context, revision, directives):
             """
             Prevent creating empty migration files when using --autogenerate,
@@ -91,19 +90,26 @@ def run_migrations_online() -> None:
             is_autogenerate = False
             if config.cmd_opts:
                 # Check if --autogenerate flag is present
-                cmd_args = getattr(config.cmd_opts, 'autogenerate', False)
-                if cmd_args or (hasattr(config.cmd_opts, 'cmd') and 'autogenerate' in str(config.cmd_opts)):
+                cmd_args = getattr(config.cmd_opts, "autogenerate", False)
+                if cmd_args or (
+                    hasattr(config.cmd_opts, "cmd")
+                    and "autogenerate" in str(config.cmd_opts)
+                ):
                     is_autogenerate = True
-            
+
             # Only prevent empty migrations when autogenerating
             if is_autogenerate and directives:
                 script = directives[0]
                 # Check if upgrade_ops is empty (no changes detected)
-                if hasattr(script, 'upgrade_ops') and script.upgrade_ops.is_empty():
+                if hasattr(script, "upgrade_ops") and script.upgrade_ops.is_empty():
                     # Clear directives to prevent file creation
                     directives[:] = []
-                    print("INFO: No schema changes detected. Skipping migration file creation.")
-                    print("INFO: To create an empty migration manually, use: alembic revision -m 'message'")
+                    print(
+                        "INFO: No schema changes detected. Skipping migration file creation."
+                    )
+                    print(
+                        "INFO: To create an empty migration manually, use: alembic revision -m 'message'"
+                    )
                     return
 
         def render_item(type_, obj, autogen_context):
@@ -116,16 +122,16 @@ def run_migrations_online() -> None:
                 # If this is an EnumType, render it as sa.String()
                 if isinstance(obj, EnumType):
                     # Get the length from the EnumType instance
-                    length = getattr(obj, 'length', 50)
+                    length = getattr(obj, "length", 50)
                     # Return a string representation that will be written to the migration file
                     # This ensures it's rendered as sa.String() not VARCHAR
                     return f"sa.String(length={length})"
-            
+
             # Return False to use default rendering for other types
             return False
 
         context.configure(
-            connection=connection, 
+            connection=connection,
             target_metadata=target_metadata,
             process_revision_directives=process_revision_directives,
             compare_type=True,
@@ -141,4 +147,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-

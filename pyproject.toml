@@ -11,12 +11,15 @@ dependencies = [
     "pydantic-settings==2.11.0",
     "sqlalchemy==2.0.44",
     "psycopg2-binary==2.9.11",
+    "asyncpg==0.30.0",
     "alembic==1.17.1",
     "email-validator==2.2.0",
     "passlib[bcrypt]==1.7.4",
     "bcrypt==4.0.1",
     "python-jose[cryptography]==3.3.0",
     "python-multipart==0.0.12",
+    "greenlet>=3.2.4",
+    "aiofiles>=25.1.0",
 ]
 
 [dependency-groups]

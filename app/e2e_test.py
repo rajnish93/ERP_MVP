@@ -330,6 +330,11 @@ async def main():
         res = await client.post(
             f"{BASE_URL}/expenses/", data=reimburse_exp_data, headers=employee_headers
         )
+        if res.status_code not in (200, 201):
+            logger.error(
+                f"❌ Create Expense for Reimbursement Failed: {res.status_code} - {res.text}"
+            )
+            return
         reimburse_exp_id = res.json()["id"]
 
         res = await client.post(

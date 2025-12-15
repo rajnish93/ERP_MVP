@@ -20,6 +20,9 @@ if TYPE_CHECKING:
     from app.db.models.expense import Expense
 
 
+SLUG_REGEX_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+
+
 class PlanType(str, enum.Enum):
     """Company subscription plan types"""
 
@@ -38,7 +41,7 @@ class Company(Base, UUIDMixin, TimestampMixin):
             "plan_type IN ('free', 'pro', 'enterprise')", name="ck_companies_plan_type"
         ),
         CheckConstraint(
-            "slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'", name="ck_companies_slug_format"
+            f"slug ~ '{SLUG_REGEX_PATTERN}'", name="ck_companies_slug_format"
         ),
         UniqueConstraint("email", name="uq_companies_email"),
     )
@@ -79,7 +82,7 @@ class Company(Base, UUIDMixin, TimestampMixin):
             raise ValueError("Slug cannot be empty")
 
         # Check format: lowercase letters, numbers, and hyphens only
-        if not re.match(r"^[a-z0-9]+(?:-[a-z0-9]+)*$", slug):
+        if not re.match(SLUG_REGEX_PATTERN, slug):
             raise ValueError(
                 "Slug must contain only lowercase letters, numbers, and hyphens. "
                 "It cannot start or end with a hyphen."

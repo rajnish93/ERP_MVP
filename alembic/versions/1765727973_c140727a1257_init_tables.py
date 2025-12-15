@@ -40,7 +40,7 @@ def upgrade() -> None:
     op.create_table('password_reset_tokens',
     sa.Column('token', sa.String(), nullable=False),
     sa.Column('email', sa.String(), nullable=False),
-    sa.Column('expires_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),

@@ -68,15 +68,18 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         elif error["type"] == "missing":
             msg = f"{field_name} is required."
 
-        errors.append(
-            {
-                "field": field_name,
-                "field_path": field_path,
-                "message": msg,
-                "type": error["type"],
-                "input": error.get("input"),
-            }
-        )
+        error_detail = {
+            "field": field_name,
+            "field_path": field_path,
+            "message": msg,
+            "type": error["type"],
+        }
+
+        # Only include input in non-production environments to avoid leaking sensitive data
+        if settings.ENVIRONMENT.lower() != "production":
+            error_detail["input"] = error.get("input")
+
+        errors.append(error_detail)
 
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

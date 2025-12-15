@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     # Environment
     ENVIRONMENT: str = "local"  # local, staging, production
-    ALLOWED_HOSTS: List[str] = ["localhost", "127.00.1"]
+    ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1"]
 
     # Security & JWT
     # Default is INSECURE for dev only

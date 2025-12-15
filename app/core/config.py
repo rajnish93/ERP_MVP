@@ -1,4 +1,5 @@
 from typing import List, Union
+import json
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -76,10 +77,20 @@ class Settings(BaseSettings):
             origins = v
         elif isinstance(v, str):
             v_str = v.strip()
+            if not v_str:
+                return []
+
+            # Try parsing as JSON first
+            try:
+                parsed = json.loads(v_str)
+                if isinstance(parsed, list):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+
+            # Fallback to comma-separated
             if v_str == "*":
                 origins = ["*"]
-            elif not v_str:
-                origins = []
             else:
                 origins = [
                     origin.strip() for origin in v_str.split(",") if origin.strip()
@@ -99,23 +110,20 @@ class Settings(BaseSettings):
             "your-secret-key-change-this-in-production-use-openssl-rand-hex-32"
         )
 
-        is_production = self.ENVIRONMENT.lower() == "production"
+        is_sensitive_env = self.ENVIRONMENT.lower() not in {"local", "test"}
 
         # 1. SECRET_KEY Check
-        if is_production and self.SECRET_KEY == insecure_default:
-            raise ValueError(
-                "CRITICAL SECURITY ERROR: The application is running in PRODUCTION mode but uses the default insecure SECRET_KEY. "
-                "You must set a secure SECRET_KEY in your environment variables."
-            )
+        if is_sensitive_env and self.SECRET_KEY == insecure_default:
+            raise ValueError("SECRET_KEY must be overridden in non-local environments")
 
         # 2. CORS Wildcard Check
         # If allow_credentials is True (default in main.py), we strictly cannot allow wildcard '*'.
-        # In production, we should be even stricter.
+        # In sensitive environments, we should be even stricter.
         if "*" in self.BACKEND_CORS_ORIGINS:
-            if is_production:
-                # Force disable in production
+            if is_sensitive_env:
+                # Force disable in production/staging
                 raise ValueError(
-                    "CRITICAL SECURITY ERROR: Wildcard CORS (*) is not allowed in production with credentials. Set explicit domains."
+                    "Wildcard CORS (*) forbidden in sensitive environments"
                 )
 
             print(

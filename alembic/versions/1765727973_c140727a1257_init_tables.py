@@ -34,7 +34,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id', name='pk_companies_id'),
     sa.UniqueConstraint('email', name='uq_companies_email')
     )
-    op.create_index(op.f('ix_companies_email'), 'companies', ['email'], unique=True)
+    op.create_index(op.f('ix_companies_email'), 'companies', ['email'], unique=False)
     op.create_index(op.f('ix_companies_name'), 'companies', ['name'], unique=False)
     op.create_index(op.f('ix_companies_slug'), 'companies', ['slug'], unique=True)
     op.create_table('password_reset_tokens',

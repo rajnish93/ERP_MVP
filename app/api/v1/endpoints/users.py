@@ -9,7 +9,7 @@ from app.db.models.employee import Employee
 from app.core.security import get_password_hash
 from app.core.deps import SessionDep, CurrentUser, CurrentCompanyId
 from app.core.error_handlers import handle_db_operation
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserInvite, UserResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
     "/create", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_user(
-    user_data: UserCreate,
+    user_data: UserInvite,
     db: SessionDep,
     current_user: CurrentUser,
 ):
@@ -238,7 +238,6 @@ async def deactivate_user(
     user.is_active = False
 
     async with handle_db_operation(db, "deactivate user"):
-        await db.commit()
         await db.commit()
         await db.refresh(user)
 

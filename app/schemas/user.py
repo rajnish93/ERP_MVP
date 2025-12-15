@@ -12,12 +12,24 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: str = Field(..., min_length=1, max_length=100)
 
+    model_config = ConfigDict(extra="forbid")
 
-class UserCreate(UserBase):
-    """Schema for creating a new user (inviting employee to portal)"""
 
-    password: str = Field(..., min_length=8, max_length=72)  # bcrypt limit is 72 bytes
-    role: UserRole = UserRole.EMPLOYEE
+class UserSignup(UserBase):
+    """Schema for public self-registration (safe, no role selection)"""
+
+    password: str = Field(..., min_length=8, max_length=72)
+    # Role is force-set to EMPLOYEE in backend
+
+
+class UserInvite(UserBase):
+    """Schema for admin inviting a new user (allows role selection)"""
+
+    password: str = Field(..., min_length=8, max_length=72)
+    role: UserRole = (
+        UserRole.EMPLOYEE
+    )  # Admin can select role (except Admin, blocked by logic)
+
     # Link to existing employee (if inviting an employee who already has an employee record)
     employee_id: Optional[UUID] = Field(
         None, description="Optional: Link to existing employee record by employee UUID"

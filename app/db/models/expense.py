@@ -50,11 +50,21 @@ class Expense(Base, UUIDMixin, TimestampMixin, CompanyMixin):
             name="ck_expenses_status",
         ),
         CheckConstraint("amount > 0", name="ck_expenses_amount_positive"),
+        # Integrity: If rejected, must have rejection_reason
+        CheckConstraint(
+            "(status = 'rejected' AND rejection_reason IS NOT NULL) OR (status != 'rejected')",
+            name="ck_expenses_rejection_integrity",
+        ),
+        # Integrity: If approved/reimbursed, must have approved_by and approved_at
+        CheckConstraint(
+            "(status IN ('approved', 'reimbursed') AND approved_by IS NOT NULL AND approved_at IS NOT NULL) OR (status NOT IN ('approved', 'reimbursed'))",
+            name="ck_expenses_approval_integrity",
+        ),
     )
 
     employee_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("employees.id", ondelete="CASCADE", name="fk_expenses_employee"),
+        ForeignKey("employees.id", ondelete="RESTRICT", name="fk_expenses_employee"),
         index=True,
         comment="Employee who submitted this expense",
     )

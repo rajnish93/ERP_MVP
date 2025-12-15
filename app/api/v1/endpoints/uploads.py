@@ -30,15 +30,26 @@ async def get_file(
     """
     from fastapi.responses import FileResponse
     from app.core.config import settings
-    import os
 
-    file_path = os.path.join(settings.UPLOAD_DIR, filename)
+    # import os (removed in favor of pathlib)
+    from pathlib import Path
+    from fastapi import HTTPException
 
-    if not os.path.exists(file_path):
-        from fastapi import HTTPException
+    # Use pathlib for path traversal protection
+    upload_dir = Path(settings.UPLOAD_DIR).resolve()
+    requested_file = (upload_dir / filename).resolve()
 
+    # 1. Normalize and resolve both paths
+    # 2. Check if the resolved file is relative to the upload directory
+    if not requested_file.is_relative_to(upload_dir):
+        # This catches ".." attempts that go outside the dir
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
         )
 
-    return FileResponse(file_path)
+    if not requested_file.exists() or not requested_file.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
+        )
+
+    return FileResponse(requested_file)

@@ -76,11 +76,10 @@ class Settings(BaseSettings):
             origins = v
         elif isinstance(v, str):
             v_str = v.strip()
-            if not v_str or v_str == "*":
-                # For backward compat in dev, if explicit "*" string is given, we might allow it
-                # BUT validate_security logic below will strip it if credentials are enabled (which they are).
-                # So here we just parse.
+            if v_str == "*":
                 origins = ["*"]
+            elif not v_str:
+                origins = []
             else:
                 origins = [
                     origin.strip() for origin in v_str.split(",") if origin.strip()
@@ -114,9 +113,6 @@ class Settings(BaseSettings):
         # In production, we should be even stricter.
         if "*" in self.BACKEND_CORS_ORIGINS:
             if is_production:
-                print(
-                    "WARNING: wildcard '*' in BACKEND_CORS_ORIGINS is allowed in production. This is highly unsafe with credentials."
-                )
                 # Force disable in production
                 raise ValueError(
                     "CRITICAL SECURITY ERROR: Wildcard CORS (*) is not allowed in production with credentials. Set explicit domains."

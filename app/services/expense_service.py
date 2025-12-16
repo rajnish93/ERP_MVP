@@ -393,13 +393,20 @@ class ExpenseService:
                     detail=f"Cannot delete expense with status '{expense.status.value}'. Only pending expenses can be deleted.",
                 )
 
-        # Cleanup file
-        if expense.receipt_url:
-            await file_service.delete_file(expense.receipt_url)
+        # Prepare for file cleanup (but do not delete yet)
+        receipt_to_delete = expense.receipt_url
 
         async with handle_db_operation(self.db, "delete expense"):
             await self.db.delete(expense)
             await self.db.commit()
+
+        # Delete file only after successful commit
+        if receipt_to_delete:
+            try:
+                await file_service.delete_file(receipt_to_delete)
+            except Exception as e:
+                # Log error but don't fail the request since DB is already updated
+                logger.error(f"Failed to delete receipt file {receipt_to_delete}: {e}")
 
     async def get_expense_by_id(
         self, company_id: UUID, current_user: User, expense_id: UUID

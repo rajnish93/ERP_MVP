@@ -31,10 +31,9 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.CheckConstraint("plan_type IN ('free', 'pro', 'enterprise')", name='ck_companies_plan_type'),
     sa.CheckConstraint("slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'", name='ck_companies_slug_format'),
-    sa.PrimaryKeyConstraint('id', name='pk_companies_id'),
-    sa.UniqueConstraint('email', name='uq_companies_email')
+    sa.PrimaryKeyConstraint('id', name='pk_companies_id')
     )
-    op.create_index(op.f('ix_companies_email'), 'companies', ['email'], unique=False)
+    op.create_index(op.f('ix_companies_email'), 'companies', ['email'], unique=True)
     op.create_index(op.f('ix_companies_name'), 'companies', ['name'], unique=False)
     op.create_index(op.f('ix_companies_slug'), 'companies', ['slug'], unique=True)
     op.create_table('password_reset_tokens',
@@ -184,4 +183,3 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_companies_email'), table_name='companies')
     op.drop_table('companies')
     # ### end Alembic commands ###
-

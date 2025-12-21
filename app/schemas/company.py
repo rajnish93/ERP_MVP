@@ -17,6 +17,8 @@ class CompanyBase(BaseModel):
         description="Optional custom slug. If not provided, will be auto-generated from company name.",
     )
 
+    model_config = ConfigDict(extra="forbid")
+
 
 class CompanyCreate(CompanyBase):
     """Schema for company signup - includes admin user details"""

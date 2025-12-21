@@ -3,7 +3,6 @@ from sqlalchemy import (
     String,
     Boolean,
     CheckConstraint,
-    UniqueConstraint,
     PrimaryKeyConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
@@ -43,7 +42,6 @@ class Company(Base, UUIDMixin, TimestampMixin):
         CheckConstraint(
             f"slug ~ '{SLUG_REGEX_PATTERN}'", name="ck_companies_slug_format"
         ),
-        UniqueConstraint("email", name="uq_companies_email"),
     )
 
     name: Mapped[str] = mapped_column(String(200), index=True)
@@ -53,7 +51,7 @@ class Company(Base, UUIDMixin, TimestampMixin):
         index=True,
         comment="URL-friendly identifier (e.g. test-corp)",
     )
-    email: Mapped[str] = mapped_column(String(255), index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     plan_type: Mapped[PlanType] = mapped_column(
         EnumType(PlanType, length=100),
         default=PlanType.FREE,

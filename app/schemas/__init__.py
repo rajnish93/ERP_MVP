@@ -1,5 +1,4 @@
 from app.schemas.user import (
-    UserCreate,
     UserResponse,
     UserLogin,
     Token,
@@ -25,7 +24,6 @@ __all__ = [
     PasswordResetResponse,
     Token,
     TokenData,
-    UserCreate,
     UserLogin,
     UserResponse,
 ]

@@ -10,11 +10,13 @@ from app.core.security import verify_password, create_access_token
 from app.core.deps import SessionDep, OAuth2Form
 from app.db.models.user import User
 from app.schemas.user import Token
+from app.core.rate_limit import limiter
 
 router = APIRouter()
 
 
 @router.post("/token", response_model=Token)
+@limiter.limit("5/minute")
 async def login_for_access_token(
     form_data: OAuth2Form,
     db: SessionDep,

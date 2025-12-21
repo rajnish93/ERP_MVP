@@ -16,3 +16,4 @@ python-multipart==0.0.12
 # Testing/Development dependencies
 faker==31.2.2
 aiofiles==24.1.0
+slowapi==0.1.9

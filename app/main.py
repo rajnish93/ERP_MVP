@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.middleware import WorkspaceMiddleware
+from app.core.rate_limit import limiter, RateLimitExceeded, _rate_limit_exceeded_handler
 
 # Create main FastAPI app with all routes under /api/v1
 # conditionally hide docs in production
@@ -29,6 +30,10 @@ app = FastAPI(
     redoc_url=None,  # Disable ReDoc always (or make conditional too)
     openapi_url=openapi_url,
 )
+
+# Initialize Limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 @app.exception_handler(RequestValidationError)

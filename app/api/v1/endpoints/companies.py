@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.deps import SessionDep
+from app.core.error_handlers import handle_db_operation
 from app.db.models.company import Company
 from app.db.models.user import User, UserRole
 from app.core.security import get_password_hash
@@ -117,23 +118,16 @@ async def company_signup(company_data: CompanyCreate, db: SessionDep):
     )
     db.add(admin_user)
 
-    try:
-        await db.commit()
-        await db.refresh(new_company)
-        await db.refresh(admin_user)
-    except IntegrityError:
-        await db.rollback()
-        # Handle concurrency collision for slug or email
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Company with this slug or email already exists. Please try again.",
-        )
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create company: {str(e)}",
-        )
+    async with handle_db_operation(db, "create company"):
+        try:
+            await db.commit()
+            await db.refresh(new_company)
+            await db.refresh(admin_user)
+        except IntegrityError:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Company with this slug or email already exists. Please try again.",
+            )
 
     logger.info("New company signed up: %s (%s)", new_company.name, new_company.slug)
 

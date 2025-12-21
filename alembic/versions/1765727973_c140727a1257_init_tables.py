@@ -180,6 +180,5 @@ def downgrade() -> None:
     op.drop_table('password_reset_tokens')
     op.drop_index(op.f('ix_companies_slug'), table_name='companies')
     op.drop_index(op.f('ix_companies_name'), table_name='companies')
-    op.drop_index(op.f('ix_companies_email'), table_name='companies')
     op.drop_table('companies')
     # ### end Alembic commands ###

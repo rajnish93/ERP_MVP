@@ -20,6 +20,9 @@ async_engine: AsyncEngine = create_async_engine(
     pool_size=settings.DB_POOL_SIZE,  # Configurable connection pool size
     max_overflow=settings.DB_MAX_OVERFLOW,  # Configurable maximum overflow connections
     echo=settings.DB_ECHO,  # Configurable SQL query logging for debugging
+    connect_args={
+        "statement_cache_size": 0,  # REQUIRED for Neon/PgBouncer poolers (disables prepared stmts)
+    },
 )
 
 # Create async session factory

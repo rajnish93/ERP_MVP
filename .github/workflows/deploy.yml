@@ -80,6 +80,12 @@ jobs:
       # Deployment Steps (Only runs if tests pass)
       # ----------------------------------------------------------------
       
+      - name: Run Production Migrations
+        run: |
+          # Use the PROD_DATABASE_URL secret for production migrations
+          export DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
+          uv run alembic upgrade head
+
       - name: Google Auth
         uses: google-github-actions/auth@v2
         with:

@@ -33,7 +33,10 @@ Before deploying, you need to set up the infrastructure on Google Cloud.
 ### Option A: Neon.tech (Recommended for Free Tier)
 1.  Go to [Neon.tech](https://neon.tech) and sign up.
 2.  Create a project (e.g., `project-1`).
-3.  Copy the **Connection String** (e.g., `postgresql://user:pass@ep-xyz.aws.neon.tech/neondb?sslmode=require`).
+3.  Copy the connection string, but **modify it for Asyncpg**:
+    *   **Original**: `postgresql://user:pass@ep-xyz.aws.neon.tech/neondb?sslmode=require`
+    *   **Modified**: `postgresql+asyncpg://user:pass@ep-xyz.aws.neon.tech/neondb?ssl=require`
+    *   *Note: Just change `postgresql://` to `postgresql+asyncpg://` and `sslmode=require` to `ssl=require`.*
 4.  This is your `PROD_DATABASE_URL`.
 
 ### Option B: Google Cloud SQL (Robust but costs money)
@@ -97,12 +100,37 @@ gcloud run deploy api-erp-mvp \
   --image asia-southeast1-docker.pkg.dev/YOUR_PROJECT_ID/erp-images/backend:manual \
   --region asia-southeast1 \
   --platform managed \
-  --allow-unauthenticated \
+  --no-allow-unauthenticated \
   --port 8000 \
-  --set-env-vars DATABASE_URL="YOUR_DB_URL",SECRET_KEY="YOUR_key"
+  --set-env-vars 'DATABASE_URL=YOUR_DB_URL,SECRET_KEY=YOUR_key,ALLOWED_HOSTS=["*"],ENVIRONMENT=production'
 ```
 
-## 6. Verification
+> **Security Note**: We use `--no-allow-unauthenticated` to match the production CI/CD pipeline and Google Cloud best practices (secure by default). This means the service is **not publicly accessible** on the internet.
+>
+> **How to Access/Test Manually:**
+>
+> **Option 1: Local Proxy (Recommended)**
+> This creates a tunnel from your local machine to the private Cloud Run service.
+> ```bash
+> gcloud run services proxy api-erp-mvp --region asia-southeast1 --port 8080
+> # Then open http://localhost:8080/docs in your browser
+> ```
+>
+> **Option 2: Curl with Identity Token**
+> ```bash
+> TOKEN=$(gcloud auth print-identity-token)
+> curl -H "Authorization: Bearer $TOKEN" https://YOUR-SERVICE-URL.a.run.app/api/v1/health
+> ```
 
-Once deployed, Cloud Run will give you a URL (e.g., `https://api-erp-mvp-xyz.a.run.app`).
-Visit `https://api-erp-mvp-xyz.a.run.app/docs` to see your Swagger UI.
+## 6. Verification
+ 
+Because the service is **secure** (private), you cannot visit the URL directly in your browser anymore (you will get `Error: Forbidden`).
+
+**To verify it works:**
+
+1.  Run the proxy command in your terminal:
+    ```bash
+    gcloud run services proxy api-erp-mvp --region asia-southeast1 --port 8080
+    ```
+2.  Open **http://localhost:8080/docs** in your browser.
+3.  You should see the private Swagger UI!

@@ -46,7 +46,10 @@ jobs:
           python-version: '3.13'
 
       - name: Install uv
-        run: curl -lsSf https://astral.sh/uv/install.sh | sh
+        run: pip install uv
+        
+      - name: Verify uv path
+        run: which uv
 
       - name: Install dependencies
         run: uv sync --frozen
@@ -67,11 +70,8 @@ jobs:
           PID=$!
           sleep 5 # Wait for server startup
           
-          # Install test runner deps (if not in main group)
-          uv pip install httpx requests
-          
           # Run the test script
-          uv run python app/e2e_test.py
+          uv run python scripts/create_test_data.py
           
           # Kill server
           kill $PID
@@ -80,6 +80,12 @@ jobs:
       # Deployment Steps (Only runs if tests pass)
       # ----------------------------------------------------------------
       
+      - name: Run Production Migrations
+        run: |
+          # Use the PROD_DATABASE_URL secret for production migrations
+          export DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
+          uv run alembic upgrade head
+
       - name: Google Auth
         uses: google-github-actions/auth@v2
         with:
@@ -111,3 +117,7 @@ jobs:
           env_vars: |
             DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
             SECRET_KEY=${{ secrets.PROD_SECRET_KEY }}
+            ALLOWED_HOSTS=["*"]
+            ENVIRONMENT=production
+            BACKEND_CORS_ORIGIN_REGEX=^http://(?:.+\\.)?lvh\\.me:3000$
+            BACKEND_CORS_ORIGINS=["http://localhost:3000"\, "http://lvh.me:3000"]

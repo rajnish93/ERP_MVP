@@ -123,8 +123,16 @@ async def get_expenses(
         limit=limit,
     )
 
+    expense_responses = []
+    for expense in expenses:
+        response = ExpenseResponse.model_validate(expense)
+        if expense.employee:
+            response.employee_name = expense.employee.name
+            response.employee_code = expense.employee.employee_id
+        expense_responses.append(response)
+
     return ExpenseListResponse(
-        expenses=[ExpenseResponse.model_validate(expense) for expense in expenses],
+        expenses=expense_responses,
         total=total,
         total_amount=total_amount,
     )
@@ -164,6 +172,10 @@ async def get_expense(
         }
 
     response = ExpenseResponse.model_validate(expense)
+    if expense.employee:
+        response.employee_name = expense.employee.name
+        response.employee_code = expense.employee.employee_id
+
     return ExpenseDetailResponse(
         **response.model_dump(), employee=employee_data, approver=approver_data
     )

@@ -174,9 +174,14 @@ class Settings(BaseSettings):
         """Construct sync database URL from settings (for Alembic and sync operations)"""
         if self.DATABASE_URL_OVERRIDE:
             # Ensure we are NOT using asyncpg driver for sync
-            return self.DATABASE_URL_OVERRIDE.replace(
+            url = self.DATABASE_URL_OVERRIDE.replace(
                 "postgresql+asyncpg://", "postgresql://"
             )
+            # Fix SSL info for psycopg2 (expects sslmode=, asyncpg expects ssl=)
+            # We replace common query param patterns
+            url = url.replace("?ssl=", "?sslmode=")
+            url = url.replace("&ssl=", "&sslmode=")
+            return url
 
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 

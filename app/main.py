@@ -1,4 +1,6 @@
 import os
+import logging
+
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.exceptions import RequestValidationError
@@ -30,6 +32,9 @@ app = FastAPI(
     redoc_url=None,  # Disable ReDoc always (or make conditional too)
     openapi_url=openapi_url,
 )
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 # Initialize Limiter
 app.state.limiter = limiter

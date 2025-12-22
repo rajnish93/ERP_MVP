@@ -1,6 +1,6 @@
 from typing import List, Union
 import json
-from pydantic import field_validator, model_validator
+from pydantic import field_validator, model_validator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -142,6 +142,12 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "localhost"  # Default to localhost for local development
     POSTGRES_PORT: str = "5432"
 
+    # Direct URL Override (e.g. for Neon, Railway, Heroku)
+    # If this is set, it takes precedence over the components above.
+    DATABASE_URL_OVERRIDE: Union[str, None] = Field(
+        default=None, validation_alias="DATABASE_URL"
+    )
+
     # Database Connection Pool Settings
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
@@ -150,11 +156,28 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         """Construct async database URL from settings"""
+        if self.DATABASE_URL_OVERRIDE:
+            # Ensure we are using asyncpg driver
+            if (
+                "postgresql://" in self.DATABASE_URL_OVERRIDE
+                and "postgresql+asyncpg" not in self.DATABASE_URL_OVERRIDE
+            ):
+                return self.DATABASE_URL_OVERRIDE.replace(
+                    "postgresql://", "postgresql+asyncpg://"
+                )
+            return self.DATABASE_URL_OVERRIDE
+
         return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     @property
     def DATABASE_URL_SYNC(self) -> str:
         """Construct sync database URL from settings (for Alembic and sync operations)"""
+        if self.DATABASE_URL_OVERRIDE:
+            # Ensure we are NOT using asyncpg driver for sync
+            return self.DATABASE_URL_OVERRIDE.replace(
+                "postgresql+asyncpg://", "postgresql://"
+            )
+
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
 

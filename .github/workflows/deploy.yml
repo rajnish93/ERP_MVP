@@ -1,0 +1,113 @@
+name: Deploy Backend to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: asia-southeast1
+  REPO_NAME: erp-images
+  IMAGE_NAME: backend
+  SERVICE_NAME: "api-erp-mvp" # Distinct service name for backend
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    # Service Container for integration testing
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: erp_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        run: curl -lsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run Migrations
+        run: |
+          # Wait for DB to be absolutely ready (sometimes healthcheck isn't enough for connection)
+          sleep 3
+          export DATABASE_URL="postgresql://postgres:password@localhost:5432/erp_db"
+          uv run alembic upgrade head
+
+      - name: Run E2E Tests
+        run: |
+          # Start Server in Background
+          export DATABASE_URL="postgresql://postgres:password@localhost:5432/erp_db"
+          export SECRET_KEY="testing-secret-key"
+          uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          PID=$!
+          sleep 5 # Wait for server startup
+          
+          # Install test runner deps (if not in main group)
+          uv pip install httpx requests
+          
+          # Run the test script
+          uv run python app/e2e_test.py
+          
+          # Kill server
+          kill $PID
+
+      # ----------------------------------------------------------------
+      # Deployment Steps (Only runs if tests pass)
+      # ----------------------------------------------------------------
+      
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: |
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev
+
+      - name: Build and Push Container
+        run: |
+          IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:${GITHUB_SHA}"
+          docker build -t ${IMAGE_URI} .
+          docker push ${IMAGE_URI}
+          echo "IMAGE_URI=${IMAGE_URI}" >> $GITHUB_ENV
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.REGION }}
+          image: ${{ env.IMAGE_URI }}
+          flags: '--no-allow-unauthenticated --port=8000'
+          # Secure Mode: Only authenticated Google Users (IAM) can access this.
+          # To invite a user: Cloud Run -> backend-service -> Permissions -> Add Principal -> User Email -> Role: Cloud Run Invoker
+          env_vars: |
+            DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
+            SECRET_KEY=${{ secrets.PROD_SECRET_KEY }}

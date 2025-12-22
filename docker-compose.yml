@@ -40,6 +40,8 @@ services:
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-["*"]}
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["http://localhost:3000","http://lvh.me:3000"]}
       - BACKEND_CORS_ORIGIN_REGEX=${BACKEND_CORS_ORIGIN_REGEX:-^http://(?:.+\.)?lvh\.me:3000$}
+    ports:
+      - "8000:8000"
     volumes:
       - ./app:/app/app
       - ./alembic:/app/alembic

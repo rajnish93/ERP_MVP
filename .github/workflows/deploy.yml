@@ -7,12 +7,10 @@ on:
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REGION: us-central1
+  REGION: asia-southeast1
   REPO_NAME: erp-images
   IMAGE_NAME: backend
   SERVICE_NAME: "api-erp-mvp" # Distinct service name for backend
-  DATABASE_URL: postgresql://postgres:password@localhost:5432/erp_db
-  SECRET_KEY: testing-secret-key
 
 jobs:
   test-and-deploy:
@@ -56,11 +54,14 @@ jobs:
         run: |
           # Wait for DB to be absolutely ready (sometimes healthcheck isn't enough for connection)
           sleep 3
+          export DATABASE_URL="postgresql://postgres:password@localhost:5432/erp_db"
           uv run alembic upgrade head
 
       - name: Run E2E Tests
         run: |
           # Start Server in Background
+          export DATABASE_URL="postgresql://postgres:password@localhost:5432/erp_db"
+          export SECRET_KEY="testing-secret-key"
           uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 &
           PID=$!
           sleep 5 # Wait for server startup

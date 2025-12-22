@@ -51,7 +51,7 @@ To give a client or colleague access to the private app:
 -   **Max Instances**: Cap at `1` instance.
 -   **Budget Alert**: Set at `$1.00`.
 
-## 5. Prerequisities
+## 5. Prerequisites
 1.  **GCP Project**: Created in Google Cloud Console.
 2.  **Artifact Registry**: A Docker repository named `erp-images` (or similar).
 3.  **Service Account**: A JSON key for GitHub Actions to authenticate (`GCP_SA_KEY` secret).

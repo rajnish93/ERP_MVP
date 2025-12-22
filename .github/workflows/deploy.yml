@@ -119,5 +119,5 @@ jobs:
             SECRET_KEY=${{ secrets.PROD_SECRET_KEY }}
             ALLOWED_HOSTS=["*"]
             ENVIRONMENT=production
-            BACKEND_CORS_ORIGIN_REGEX=^http://(?:.+\.)?lvh\.me:3000$
-            BACKEND_CORS_ORIGINS=http://localhost:3000\,http://lvh.me:3000
+            BACKEND_CORS_ORIGIN_REGEX=^http://(?:.+\\.)?lvh\\.me:3000$
+            BACKEND_CORS_ORIGINS=["http://localhost:3000"\, "http://lvh.me:3000"]
